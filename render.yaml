@@ -1,20 +1,20 @@
-# Render 后端部署配置
+# Render 全栈部署配置（一并托管 Vue 前端 + Express 后端）
 # https://render.com/docs/deploy#deploy-from-a-github-repository
 services:
   - type: web
-    name: dreamtipper-api
+    name: dreamtipper
     env: node
-    region: singapore  # 亚太节点，延迟低
-    rootDir: server
-    buildCommand: npm install
-    startCommand: npm start
-    plan: free  # 免费版：15分钟无流量休眠，休眠后首次请求约30秒冷启动
+    region: singapore
+    rootDir: .
+    buildCommand: npm install --prefix client && npm run build --prefix client && npm install --prefix server
+    startCommand: cd server && node index.js
+    plan: free
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
+      - key: CORS_ORIGIN
+        value: '*'
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
