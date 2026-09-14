@@ -37,13 +37,21 @@ jobs:
         run: npm run build
         working-directory: client
         env:
-          VITE_API_URL: ${{ secrets.API_URL || 'https://dreamtipper.onrender.com' }}
+          VITE_API_URL: ${{ secrets.API_URL || 'https://dreamtipper-api.onrender.com' }}
           VITE_BASE_URL: /
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: client/dist
+
+      - name: Trigger Render backend deploy
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
+        run: |
+          echo "Triggering Render deploy..."
+          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          fi
 
   deploy:
     needs: build
