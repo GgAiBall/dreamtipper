@@ -3,8 +3,8 @@ name: Deploy Frontend to GitHub Pages
 on:
   push:
     branches:
-      - main  # 每次推送到 main 分支自动部署
-  workflow_dispatch:  # 也支持手动触发
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,7 +37,7 @@ jobs:
         run: npm run build
         working-directory: client
         env:
-          VITE_API_URL: ${{ vars.API_URL || 'https://dreamtipper.onrender.com' }}
+          VITE_API_URL: ${{ secrets.API_URL || 'https://dreamtipper.onrender.com' }}
           VITE_BASE_URL: /
 
       - name: Upload artifact
