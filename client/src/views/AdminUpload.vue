@@ -174,7 +174,13 @@ function tierTag(t) { return { free: '🆓', monthly: '💎', yearly: '👑' }[t
 function statusLabel(s) { return { pending: '📝 草稿', published: '✅ 已发布', settled: '🏁 已结算' }[s] || s }
 function playLabel(k) { return { win_draw_loss: '胜平负', handicap: '让球', score: '比分', goals: '进球', half_full: '半全' }[k] || k }
 function resultDot(r) { return { win: '✅', loss: '❌', push: '🔄', pending: '⏳' }[r] || '-' }
-function parsePlays(h) { if (!h) return {}; try { return JSON.parse(h) } catch (e) { return {} } }
+function parsePlays(h) {
+  if (!h) return {}
+  let v
+  try { v = JSON.parse(h) } catch (e) { v = h }
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v
+  return { handicap: { pick: String(v), result: 'pending' } }
+}
 function formatTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
 function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleString('zh-CN', { year:'2-digit', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
 

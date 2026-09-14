@@ -77,12 +77,10 @@ function playLabel(key) { return playLabelMap[key] || key }
 
 function parsePlays(handicapStr) {
   if (!handicapStr) return {}
-  try {
-    const obj = JSON.parse(handicapStr)
-    return obj
-  } catch (e) {
-    return {}
-  }
+  let v
+  try { v = JSON.parse(handicapStr) } catch (e) { v = handicapStr }
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v
+  return { handicap: { pick: String(v), result: 'pending' } }
 }
 
 function tierTag(t) {
