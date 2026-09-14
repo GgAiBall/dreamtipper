@@ -1,0 +1,21 @@
+# Render 后端部署配置
+# https://render.com/docs/deploy#deploy-from-a-github-repository
+services:
+  - type: web
+    name: dreamtipper-api
+    env: node
+    region: singapore  # 亚太节点，延迟低
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free  # 免费版：15分钟无流量休眠，休眠后首次请求约30秒冷启动
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 30d

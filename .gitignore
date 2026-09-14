@@ -1,0 +1,28 @@
+# 依赖
+node_modules/
+
+# 数据库文件（包含所有数据，不上传）
+*.db
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 构建产物
+client/dist/
+client/node_modules/
+server/node_modules/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# 其他
+dreamtipper.db
+*.bak
