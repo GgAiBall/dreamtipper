@@ -10,7 +10,7 @@ node_modules/
 .env.*.local
 
 # 构建产物
-client/dist/
+# 注意：client/dist 需要提交（Render 直接托管，免构建）
 client/node_modules/
 server/node_modules/
 
