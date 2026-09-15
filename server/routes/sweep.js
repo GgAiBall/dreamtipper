@@ -27,16 +27,21 @@ router.get('/', async (req, res) => {
 
     let sql = `SELECT * FROM sweep_records WHERE status != 'pending'`;
     const params = [];
-    if (date) { sql += ` AND date(match_time) = ?`; params.push(date); }
-    if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); }
-    if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); }
+    const totalParams = [];
+    if (date) { sql += ` AND date(match_time) = ?`; params.push(date); totalParams.push(date); }
+    if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); totalParams.push(`%${league}%`); }
+    if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); totalParams.push(parseInt(weekday)); }
     sql += ` ORDER BY match_time DESC`;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     sql += ` LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), offset);
 
     const rows = await queryAll(sql, params);
-    const totalObj = await queryOne(`SELECT COUNT(*) as c FROM sweep_records WHERE status != 'pending'`);
+    let totalSql = `SELECT COUNT(*) as c FROM sweep_records WHERE status != 'pending'`;
+    if (date) totalSql += ` AND date(match_time) = ?`;
+    if (league) totalSql += ` AND league LIKE ?`;
+    if (weekday) totalSql += ` AND weekday = ?`;
+    const totalObj = await queryOne(totalSql, totalParams);
     const total = totalObj?.c || 0;
 
     const userLevel = tierLevel(userTier);
