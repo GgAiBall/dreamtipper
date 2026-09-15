@@ -43,7 +43,7 @@ async function run(sql, params = []) {
     await db.execute({ sql, args: params });
     return true;
   } catch (e) {
-    console.error('Run error:', e.message, 'code:', e.code);
+    console.error('Run error:', e.message);
     return false;
   }
 }

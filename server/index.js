@@ -19,16 +19,6 @@ app.get('/api/health', async (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// 调试 endpoint（临时）
-app.get('/api/_dbg_run', async (req, res) => {
-  const { run, queryOne } = require('./db');
-  const tag = 'DBG_' + Date.now();
-  const ok = await run('INSERT INTO sweep_records (id, league, home_team, away_team, match_time, handicap, status, tier_required, match_no, weekday, confidence_stars, uploaded_by, odds, odds_type, result, match_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-    [tag, 'Debug', 'D-H', 'D-A', new Date().toISOString(), '[]', 'pending', 'free', tag, 6, 3, 'admin-001', 1.5, '胜平负', 'pending', tag]);
-  const found = await queryOne('SELECT id, home_team FROM sweep_records WHERE id=?', [tag]);
-  res.json({ ok, tag, found });
-});
-
 // 启动
 async function start() {
   await initDb();
