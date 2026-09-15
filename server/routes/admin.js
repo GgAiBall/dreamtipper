@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
@@ -118,15 +118,15 @@ router.post('/sweep', adminAuth, async (req, res) => {
   try {
     const data = req.body;
     const id = data.id || uuidv4();
-    await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, data.match_id || id, data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '', parseFloat(data.odds) || 0,
         data.odds_type || '胜平负', parseInt(data.confidence_stars) || 3,
         data.tier_required || 'free', data.result || 'pending',
         'pending', req.user.id,
-        parseInt(data.weekday) || 0, data.match_no || '',
-        data.published_at || null]);
+        parseInt(data.weekday) || 0, data.match_no || '']);
+    if (!ok) return res.status(500).json({ error: '数据库写入失败' });
     res.json({ success: true, id, message: '已保存为草稿' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -135,18 +135,19 @@ router.post('/sweep', adminAuth, async (req, res) => {
 router.put('/sweep/:id', adminAuth, async (req, res) => {
   try {
     const data = req.body;
-    await run(`UPDATE sweep_records SET
+    const ok2 = await run(`UPDATE sweep_records SET
       league = ?, home_team = ?, away_team = ?, match_time = ?, handicap = ?,
       odds = ?, odds_type = ?, confidence_stars = ?, tier_required = ?,
-      weekday = ?, match_no = ?,
+      weekday = ?, match_no = ?, published_at = ?,
       result = ?, updated_at = datetime('now')
       WHERE id = ?`,
       [data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '',
         parseFloat(data.odds) || 0, data.odds_type || '胜平负',
         parseInt(data.confidence_stars) || 3, data.tier_required || 'free',
-        parseInt(data.weekday) || 0, data.match_no || '',
+        parseInt(data.weekday) || 0, data.match_no || '', null,
         data.result || 'pending', req.params.id]);
+    if (!ok2) return res.status(500).json({ error: '数据库更新失败' });
     res.json({ success: true, message: '已更新，记录变更时间' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
