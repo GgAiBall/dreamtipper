@@ -285,6 +285,41 @@ router.post('/plans', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── 会员升级（管理员操作）──────────────────────────────────────
+router.put('/members/:id/upgrade', adminAuth, async (req, res) => {
+  try {
+    const { tier, days } = req.body;
+    const validTiers = { monthly: 30, yearly: 365 };
+    if (!validTiers[tier]) return res.status(400).json({ error: '无效等级' });
+    const daysNum = parseInt(days) || validTiers[tier];
+    const expireAt = new Date(Date.now() + daysNum * 24 * 60 * 60 * 1000).toISOString();
+    await run(`UPDATE users SET subscription_tier = ?, subscription_expire = ? WHERE id = ? AND role = 'user'`,
+      [tier, expireAt, req.params.id]);
+    // 记录购买
+    const prices = { monthly: 19900, yearly: 99900 };
+    const purchaseId = uuidv4();
+    await run(`INSERT INTO user_purchases (id, user_id, type, amount, status, paid_at, expire_at) VALUES (?, ?, 'admin_grant', ?, 'paid', datetime('now'), ?)`,
+      [purchaseId, req.params.id, prices[tier] || 0, expireAt]);
+    res.json({ success: true, tier, expireAt, days: daysNum });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 重置密码（管理员操作）──────────────────────────────────────
+router.put('/members/:id/reset-password', adminAuth, async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    // 生成 8 位临时密码
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let tmp = '';
+    for (let i = 0; i < 8; i++) tmp += chars[Math.floor(Math.random() * chars.length)];
+    const hash = bcrypt.hashSync(tmp, 10);
+    await run(`UPDATE users SET password_hash = ? WHERE id = ? AND role = 'user'`, [hash, req.params.id]);
+    // 管理员操作日志
+    await run(`INSERT INTO admin_logs (id, user_id, action, detail) VALUES (?, ?, 'reset_password', ?)`, [uuidv4(), req.user.id, req.params.id]);
+    res.json({ success: true, tempPassword: tmp });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/plans/:id', adminAuth, async (req, res) => {
   try {
     const { name, description, price, tier_required, is_active } = req.body;

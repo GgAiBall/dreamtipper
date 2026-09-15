@@ -12,7 +12,7 @@ router.get('/me', auth, async (req, res) => {
       LEFT JOIN plans pl ON p.plan_id = pl.id
       WHERE p.user_id = ?
       ORDER BY p.created_at DESC
-    `, [req.params.user.id]);
+    `, [req.user.id]);
     res.json({ purchases });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -29,12 +29,12 @@ router.post('/subscribe', auth, async (req, res) => {
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
     await run(`INSERT INTO user_purchases (id, user_id, type, amount, status, paid_at, expire_at) VALUES (?, ?, 'subscription', ?, 'paid', datetime('now'), ?)`,
-      [purchaseId, req.params.user.id, prices[tier], expireAt]);
+      [purchaseId, req.user.id, prices[tier], expireAt]);
 
     await run(`UPDATE users SET subscription_tier = ?, subscription_expire = ? WHERE id = ?`,
-      [tier, expireAt, req.params.user.id]);
+      [tier, expireAt, req.user.id]);
 
-    const user = await queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire FROM users WHERE id = ?', [req.params.user.id]);
+    const user = await queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire FROM users WHERE id = ?', [req.user.id]);
     res.json({ success: true, user });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

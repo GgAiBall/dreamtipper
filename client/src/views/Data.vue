@@ -10,14 +10,29 @@
       <input v-model="leagueFilter" type="text" placeholder="搜索联赛..." class="filter-input" @input="debouncedLoad" />
       <button @click="loadData" class="btn btn-primary btn-sm">刷新</button>
       <router-link to="/admin/upload" v-if="auth.isAdmin" class="btn btn-ghost btn-sm">上传数据</router-link>
+      <!-- 管理员批量操作 -->
+      <template v-if="auth.isAdmin">
+        <span class="divider-v"></span>
+        <button @click="selectAll" class="btn btn-ghost btn-sm">全选</button>
+        <button @click="deselectAll" class="btn btn-ghost btn-sm">反选</button>
+        <button v-if="selectedIds.size > 0" @click="confirmBatchDelete" class="btn btn-danger btn-sm">
+          删除所选 <span class="badge">{{ selectedIds.size }}</span>
+        </button>
+      </template>
     </div>
 
     <div class="records-table" v-if="records.length">
       <div class="table-header">
+        <span class="check-cell" v-if="auth.isAdmin">
+          <input type="checkbox" :checked="selectedIds.size === records.length && records.length > 0" :indeterminate="selectedIds.size > 0 && selectedIds.size < records.length" @change="selectedIds.size === records.length && records.length > 0 ? deselectAll() : selectAll()" />
+        </span>
         <span>联赛</span><span>主队</span><span>客队</span><span>时间</span>
         <span>玩法推荐</span><span>信心</span><span>权限</span><span>结果</span>
       </div>
-      <div class="table-row" v-for="r in records" :key="r.id">
+      <div class="table-row" :class="{ selected: selectedIds.has(r.id) }" v-for="r in records" :key="r.id">
+        <span class="check-cell" v-if="auth.isAdmin">
+          <input type="checkbox" :value="r.id" v-model="selectedIdsArr" />
+        </span>
         <span class="league-tag">{{ r.league }}</span>
         <span>{{ r.home_team }}</span>
         <span>{{ r.away_team }}</span>
@@ -35,7 +50,21 @@
         <span class="tier-tag" :class="r.tier_required">{{ tierTag(r.tier_required) }}</span>
         <span class="result-tag" :class="r.result">{{ resultLabel(r.result) }}</span>
       </div>
+
+    <!-- 批量删除确认弹窗 -->
+    <div class="modal-overlay" v-if="showDeleteConfirm" @click.self="showDeleteConfirm = false">
+      <div class="modal-box">
+        <h3>确认删除</h3>
+        <p>确定要删除选中的 <strong>{{ selectedIds.size }}</strong> 条记录吗？此操作不可恢复。</p>
+        <div class="modal-actions">
+          <button @click="showDeleteConfirm = false" class="btn btn-ghost btn-sm">取消</button>
+          <button @click="batchDelete" class="btn btn-danger btn-sm" :disabled="deleting">
+            {{ deleting ? `删除中 (${deletedCount}/${selectedIds.size})` : '确认删除' }}
+          </button>
+        </div>
+      </div>
     </div>
+  </div>
 
     <div class="empty" v-else-if="!loading">
       <p>暂无数据</p>
@@ -59,6 +88,45 @@ import { api } from '@/stores/auth'
 const auth = useAuthStore()
 const records = ref([])
 const loading = ref(false)
+const selectedIds = ref(new Set())
+const selectedIdsArr = ref([])  // v-model checkbox array proxy
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const deletedCount = ref(0)
+
+// 同步 checkbox array -> Set
+function syncSelected() {
+  selectedIds.value = new Set(selectedIdsArr.value)
+}
+
+function selectAll() {
+  selectedIdsArr.value = records.value.map(r => r.id)
+  selectedIds.value = new Set(selectedIdsArr.value)
+}
+function deselectAll() {
+  selectedIdsArr.value = []
+  selectedIds.value = new Set()
+}
+
+async function batchDelete() {
+  deleting.value = true
+  deletedCount.value = 0
+  const ids = [...selectedIds.value]
+  for (const id of ids) {
+    try {
+      await api.delete(`/admin/sweep/${id}`)
+      deletedCount.value++
+    } catch (e) { console.error('删除失败', id, e) }
+  }
+  deleting.value = false
+  showDeleteConfirm.value = false
+  deselectAll()
+  await loadData()
+}
+
+function confirmBatchDelete() {
+  showDeleteConfirm.value = true
+}
 const dateFilter = ref(new Date().toISOString().split('T')[0])
 const leagueFilter = ref('')
 const page = ref(1)
@@ -110,6 +178,8 @@ async function loadData() {
 
 let timer
 function debouncedLoad() { clearTimeout(timer); timer = setTimeout(loadData, 400) }
+
+watch(selectedIdsArr, syncSelected)
 
 onMounted(loadData)
 </script>
