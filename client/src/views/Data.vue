@@ -244,10 +244,10 @@ onMounted(loadData)
 .table-row.selected { background: rgba(88,166,255,0.06); }
 .table-row:last-child { border-radius: 0 0 8px 8px; }
 
-/* 管理员列 */
-.table-header { grid-template-columns: 32px 80px 1fr 1fr 130px 2fr 90px 60px 70px; }
-.table-row { grid-template-columns: 32px 80px 1fr 1fr 130px 2fr 90px 60px 70px; }
-.table-header.vip, .table-row.vip { grid-template-columns: 32px 80px 1fr 1fr 130px 2fr 90px 60px 70px 80px; }
+/* 表格列：场次 | 联赛 | 主队 | 客队 | 时间 | 玩法推荐 | 信心 | 权限 | 结果 */
+.table-header { grid-template-columns: 32px 80px 1fr 1fr 130px 110px 2fr 70px 60px 70px; }
+.table-row { grid-template-columns: 32px 80px 1fr 1fr 130px 110px 2fr 70px 60px 70px; }
+.table-header.vip, .table-row.vip { grid-template-columns: 32px 80px 1fr 1fr 130px 110px 2fr 70px 60px 70px 80px; }
 .check-cell { display: flex; justify-content: center; }
 
 .league-tag { font-size: 11px; color: #58A6FF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
