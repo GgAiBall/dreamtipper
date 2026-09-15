@@ -12,7 +12,7 @@ function tierLevel(tier) { return { free: 0, monthly: 1, yearly: 2 }[tier] || 0;
 
 router.get('/', async (req, res) => {
   try {
-    const { date, league, page = 1, limit = 50 } = req.query;
+    const { date, league, page = 1, limit = 50, weekday } = req.query;
 
     let userTier = 'free';
     const authHeader = req.headers.authorization;
@@ -29,6 +29,7 @@ router.get('/', async (req, res) => {
     const params = [];
     if (date) { sql += ` AND date(match_time) = ?`; params.push(date); }
     if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); }
+    if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); }
     sql += ` ORDER BY match_time DESC`;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     sql += ` LIMIT ? OFFSET ?`;

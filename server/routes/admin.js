@@ -75,13 +75,14 @@ router.post('/sweep', adminAuth, async (req, res) => {
   try {
     const data = req.body;
     const id = data.id || uuidv4();
-    await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, published_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, data.match_id || id, data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '', parseFloat(data.odds) || 0,
         data.odds_type || '胜平负', parseInt(data.confidence_stars) || 3,
         data.tier_required || 'free', data.result || 'pending',
         'pending', req.user.id,
+        parseInt(data.weekday) || 0, data.match_no || '',
         data.published_at || null]);
     res.json({ success: true, id, message: '已保存为草稿' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -94,12 +95,14 @@ router.put('/sweep/:id', adminAuth, async (req, res) => {
     await run(`UPDATE sweep_records SET
       league = ?, home_team = ?, away_team = ?, match_time = ?, handicap = ?,
       odds = ?, odds_type = ?, confidence_stars = ?, tier_required = ?,
+      weekday = ?, match_no = ?,
       result = ?, updated_at = datetime('now')
       WHERE id = ?`,
       [data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '',
         parseFloat(data.odds) || 0, data.odds_type || '胜平负',
         parseInt(data.confidence_stars) || 3, data.tier_required || 'free',
+        parseInt(data.weekday) || 0, data.match_no || '',
         data.result || 'pending', req.params.id]);
     res.json({ success: true, message: '已更新，记录变更时间' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -144,12 +147,13 @@ router.delete('/sweep/:id', adminAuth, async (req, res) => {
 
 router.get('/sweep', adminAuth, async (req, res) => {
   try {
-    const { date, league, page = 1, limit = 50, status } = req.query;
+    const { date, league, page = 1, limit = 50, status, weekday } = req.query;
     let sql = `SELECT * FROM sweep_records WHERE 1=1`;
     const params = [];
     if (date) { sql += ` AND date(match_time) = ?`; params.push(date); }
     if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); }
     if (status) { sql += ` AND status = ?`; params.push(status); }
+    if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); }
     sql += ` ORDER BY updated_at DESC, match_time DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
     const records = await queryAll(sql, params);

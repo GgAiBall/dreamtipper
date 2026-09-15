@@ -27,6 +27,14 @@
         <div class="form-group"><label>主队</label><input v-model="form.home_team" required /></div>
         <div class="form-group"><label>客队</label><input v-model="form.away_team" required /></div>
         <div class="form-group"><label>比赛时间</label><input v-model="form.match_time" type="datetime-local" required /></div>
+        <div class="form-group"><label>场次编号</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select v-model.number="form.weekday" style="width:120px">
+              <option v-for="d in weekdays" :key="d.value" :value="d.value">{{ d.label }}</option>
+            </select>
+            <input v-model="form.match_no" placeholder="如 001" maxlength="4" style="width:80px" />
+          </div>
+        </div>
         <div class="form-group"><label>信心星级</label>
           <select v-model.number="form.confidence_stars">
             <option v-for="n in 5" :key="n" :value="n">{{ '★'.repeat(n) }}{{ '☆'.repeat(5-n) }}</option>
@@ -65,6 +73,7 @@
             <span class="league-tag">{{ r.league }}</span>
             <span class="match-teams">{{ r.home_team }} VS {{ r.away_team }}</span>
             <span class="mono time">{{ formatTime(r.match_time) }}</span>
+            <span class="weekday-badge">{{ weekdayLabel(r.weekday) }} {{ r.match_no }}</span>
             <span class="tier-tag" :class="r.tier_required">{{ tierTag(r.tier_required) }}</span>
             <span class="stars">
               <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
@@ -103,6 +112,14 @@
           <div class="form-group"><label>主队</label><input v-model="editForm.home_team" /></div>
           <div class="form-group"><label>客队</label><input v-model="editForm.away_team" /></div>
           <div class="form-group"><label>比赛时间</label><input v-model="editForm.match_time" type="datetime-local" /></div>
+          <div class="form-group"><label>场次编号</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select v-model.number="editForm.weekday" style="width:120px">
+                <option v-for="d in weekdays" :key="d.value" :value="d.value">{{ d.label }}</option>
+              </select>
+              <input v-model="editForm.match_no" placeholder="如 001" maxlength="4" style="width:80px" />
+            </div>
+          </div>
           <div class="form-group"><label>信心星级</label>
             <select v-model.number="editForm.confidence_stars">
               <option v-for="n in 5" :key="n" :value="n">{{ '★'.repeat(n) }}{{ '☆'.repeat(5-n) }}</option>
@@ -156,6 +173,11 @@ const playTypes = [
   { key: 'goals', label: '进球', tag: '总进球', placeholder: '如：3球' },
   { key: 'half_full', label: '半全', tag: '半场/全场', placeholder: '如：平/胜' },
 ]
+const weekdays = [
+  { value: 1, label: '周一' }, { value: 2, label: '周二' },
+  { value: 3, label: '周三' }, { value: 4, label: '周四' },
+  { value: 5, label: '周五' }, { value: 6, label: '周六' }, { value: 7, label: '周日' },
+]
 
 function emptyPlays() {
   const obj = {}; playTypes.forEach(p => { obj[p.key] = { pick: '', result: 'pending' } }); return obj
@@ -163,12 +185,13 @@ function emptyPlays() {
 
 const form = ref({
   league: '', home_team: '', away_team: '', match_time: '',
-  confidence_stars: 3, tier_required: 'free', plays: emptyPlays()
+  confidence_stars: 3, tier_required: 'free', plays: emptyPlays(),
+  weekday: 1, match_no: ''
 })
 
 const editing = ref(null)
 const saving = ref(false)
-const editForm = ref({ league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays() })
+const editForm = ref({ league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '' })
 
 function tierTag(t) { return { free: '🆓', monthly: '💎', yearly: '👑' }[t] || t }
 function statusLabel(s) { return { pending: '📝 草稿', published: '✅ 已发布', settled: '🏁 已结算' }[s] || s }
@@ -183,6 +206,7 @@ function parsePlays(h) {
 }
 function formatTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
 function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleString('zh-CN', { year:'2-digit', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
+function weekdayLabel(w) { return {1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[w]||'' }
 
 async function loadCounts() {
   try {
@@ -212,7 +236,8 @@ async function submitDraft() {
       league: form.value.league, home_team: form.value.home_team, away_team: form.value.away_team,
       match_time: form.value.match_time, confidence_stars: form.value.confidence_stars,
       tier_required: form.value.tier_required, odds_type: 'multi',
-      handicap: JSON.stringify(plays), odds: 0, result: 'pending'
+      handicap: JSON.stringify(plays), odds: 0, result: 'pending',
+      weekday: form.value.weekday, match_no: form.value.match_no
     }
     const settled = Object.values(plays).filter(p => p.result !== 'pending')
     if (settled.length > 0) {
@@ -224,7 +249,7 @@ async function submitDraft() {
     }
     await api.post('/admin/sweep', payload)
     submitMsg.value = { text: '已保存为草稿，可点击"发布"上线', error: false }
-    form.value = { league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays() }
+    form.value = { league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '' }
     await loadRecords()
   } catch (e) { submitMsg.value = { text: e.response?.data?.error || '保存失败', error: true } }
   finally { submitting.value = false }
@@ -247,13 +272,13 @@ function editRecord(r) {
   const plays = parsePlays(r.handicap)
   const filled = emptyPlays()
   Object.keys(plays).forEach(k => { if (filled[k]) filled[k] = plays[k] })
-  editForm.value = { league: r.league, home_team: r.home_team, away_team: r.away_team, match_time: r.match_time ? r.match_time.replace(' ', 'T').substring(0, 16) : '', confidence_stars: r.confidence_stars, tier_required: r.tier_required, plays: filled }
+  editForm.value = { league: r.league, home_team: r.home_team, away_team: r.away_team, match_time: r.match_time ? r.match_time.replace(' ', 'T').substring(0, 16) : '', confidence_stars: r.confidence_stars, tier_required: r.tier_required, plays: filled, weekday: r.weekday || 1, match_no: r.match_no || '' }
 }
 
 async function saveEdit() {
   saving.value = true
   try {
-    const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: editForm.value.match_time, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(editForm.value.plays), result: 'pending' }
+    const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: editForm.value.match_time, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(editForm.value.plays), result: 'pending', weekday: editForm.value.weekday, match_no: editForm.value.match_no }
     await api.put(`/admin/sweep/${editing.value}`, payload)
     editing.value = null
     await loadRecords()

@@ -60,7 +60,7 @@ async function initDb() {
 
   await db.execute(`CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, price INTEGER DEFAULT 0, tier_required TEXT DEFAULT 'free', stats TEXT DEFAULT '{"total":0,"wins":0,"losses":0,"pushes":0}', subscriber_count INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS sweep_records (id TEXT PRIMARY KEY, match_id TEXT, league TEXT, home_team TEXT NOT NULL, away_team TEXT NOT NULL, match_time TEXT NOT NULL, handicap TEXT, odds REAL, odds_type TEXT, confidence_stars INTEGER DEFAULT 3, tier_required TEXT DEFAULT 'free', result TEXT DEFAULT 'pending', status TEXT DEFAULT 'pending', uploaded_by TEXT, published_at TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+  await db.execute(`CREATE TABLE IF NOT EXISTS sweep_records (id TEXT PRIMARY KEY, match_id TEXT, league TEXT, home_team TEXT NOT NULL, away_team TEXT NOT NULL, match_time TEXT NOT NULL, handicap TEXT, odds REAL, odds_type TEXT, confidence_stars INTEGER DEFAULT 3, tier_required TEXT DEFAULT 'free', result TEXT DEFAULT 'pending', status TEXT DEFAULT 'pending', uploaded_by TEXT, weekday INTEGER, match_no TEXT, published_at TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
 
   await db.execute(`CREATE TABLE IF NOT EXISTS recommendations (id TEXT PRIMARY KEY, plan_id TEXT, sweep_record_id TEXT, title TEXT, content TEXT, published_at TEXT DEFAULT (datetime('now')), result TEXT DEFAULT 'pending', profit REAL DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
 
@@ -70,9 +70,9 @@ async function initDb() {
 
   await db.execute(`CREATE TABLE IF NOT EXISTS admin_logs (id TEXT PRIMARY KEY, user_id TEXT, action TEXT, detail TEXT, created_at TEXT DEFAULT (datetime('now')))`);
 
-  // 每日解锁计数列（免费用户用，清零逻辑见 purchases.js）
-  await db.execute(`ALTER TABLE users ADD COLUMN unlock_used_today INTEGER DEFAULT 0`);
-  await db.execute(`ALTER TABLE users ADD COLUMN unlock_date TEXT`);
+  // 每日解锁计数列（try 防已存在时 ALTER 报错）
+  try { await db.execute(`ALTER TABLE users ADD COLUMN unlock_used_today INTEGER DEFAULT 0`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE users ADD COLUMN unlock_date TEXT`); } catch (e) {}
 
   // 管理员
   const adminExists = await queryOne("SELECT id FROM users WHERE role = 'admin'");
@@ -121,6 +121,8 @@ async function initSampleData() {
 
     for (let i = 0; i < matchCount; i++) {
       const id = `sweep-${dateStr}-${i.toString().padStart(2, '0')}`;
+      const weekday = new Date(dateStr + 'T00:00:00').getDay();
+      const matchNo = (i + 1).toString().padStart(3, '0');
       const league = leagues[Math.floor(Math.random() * leagues.length)];
       const home = teams[Math.floor(Math.random() * teams.length)];
       let away = teams[Math.floor(Math.random() * teams.length)];
@@ -143,8 +145,8 @@ async function initSampleData() {
       }
       const published_at = `${dateStr} ${(14 + Math.floor(Math.random() * 2)).toString().padStart(2, '0')}:00:00`;
       await db.execute({
-        sql: `INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [id, `match-${id}`, league, home, away, matchTime, handicap, parseFloat(odds), oddsType, stars, tier, result, status, 'admin-001', published_at]
+        sql: `INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [id, `match-${id}`, league, home, away, matchTime, handicap, parseFloat(odds), oddsType, stars, tier, result, status, 'admin-001', weekday, matchNo, published_at]
       });
     }
 

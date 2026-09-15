@@ -8,6 +8,11 @@
     <div class="filters">
       <input v-model="dateFilter" type="date" class="filter-input" @change="loadData" />
       <input v-model="leagueFilter" type="text" placeholder="搜索联赛..." class="filter-input" @input="debouncedLoad" />
+      <div class="filter-weekday-tabs">
+        <button v-for="d in weekdays" :key="d.value" :class="{ active: weekdayFilter === d.value }"
+          @click="weekdayFilter = weekdayFilter === d.value ? null : d.value; loadData()">{{ d.label }}</button>
+        <button v-if="weekdayFilter" @click="weekdayFilter = null; loadData()" class="clear-btn">× 清除</button>
+      </div>
       <button @click="loadData" class="btn btn-primary btn-sm">刷新</button>
       <router-link to="/admin/upload" v-if="auth.isAdmin" class="btn btn-ghost btn-sm">上传数据</router-link>
       <!-- 管理员批量操作 -->
@@ -40,7 +45,7 @@
             :indeterminate="selectedIds.size > 0 && selectedIds.size < records.length"
             @change="selectedIds.size === records.length && records.length > 0 ? deselectAll() : selectAll()" />
         </span>
-        <span>联赛</span><span>主队</span><span>客队</span><span>时间</span>
+        <span>场次</span><span>联赛</span><span>主队</span><span>客队</span><span>时间</span>
         <span>玩法推荐</span><span>信心</span><span>权限</span><span>结果</span>
         <span v-if="auth.isLoggedIn && auth.tier === 'free'">操作</span>
       </div>
@@ -48,6 +53,7 @@
         <span class="check-cell" v-if="auth.isAdmin">
           <input type="checkbox" :value="r.id" v-model="selectedIdsArr" />
         </span>
+        <span class="mono match-no">{{ weekdayShort(r.weekday) }}{{ r.match_no }}</span>
         <span class="league-tag">{{ r.league }}</span>
         <span>{{ r.home_team }}</span>
         <span>{{ r.away_team }}</span>
@@ -123,6 +129,8 @@ const records = ref([])
 const loading = ref(false)
 const dateFilter = ref(new Date().toISOString().split('T')[0])
 const leagueFilter = ref('')
+const weekdayFilter = ref(null)
+const weekdays = [{value:1,label:'周一'},{value:2,label:'周二'},{value:3,label:'周三'},{value:4,label:'周四'},{value:5,label:'周五'},{value:6,label:'周六'},{value:7,label:'周日'}]
 const page = ref(1)
 const limit = 30
 const total = ref(0)
@@ -187,11 +195,13 @@ function tierTag(t) { return { free: '🆓', monthly: '💎', yearly: '👑' }[t
 function resultLabel(r) { return { win: '✅红', loss: '❌黑', push: '🔄走', pending: '⏳待定' }[r] || '-' }
 function resultDot(r) { return { win: '✅', loss: '❌', push: '🔄', pending: '⏳' }[r] || '-' }
 function formatTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }
+function weekdayShort(w) { return {1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[w]||'' }
 
 async function loadData() {
   loading.value = true
   try {
     const params = { page: page.value, limit, date: dateFilter.value, league: leagueFilter.value }
+    if (weekdayFilter.value) params.weekday = weekdayFilter.value
     const { data } = await api.get('/sweep', { params })
     records.value = data.records
     total.value = data.total

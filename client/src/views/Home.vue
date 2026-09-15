@@ -62,6 +62,7 @@
             <div class="rc-header">
               <span class="rc-league">{{ r.league }}</span>
               <span class="rc-time mono">{{ formatTime(r.match_time) }}</span>
+              <span class="rc-match-no">{{ weekdayShort(r.weekday) }}{{ r.match_no }}</span>
             </div>
             <div class="rc-match">
               <div class="rc-team">{{ r.home_team }}</div>
@@ -188,6 +189,7 @@ const overviewStats = computed(() => {
 function tierTag(t) {
   return { free: '🆓 免费', monthly: '💎 月度', yearly: '👑 年度' }[t] || t
 }
+function weekdayShort(w) { return {1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[w]||'' }
 function resultLabel(r) {
   return { win: '✅ 红', loss: '❌ 黑', push: '🔄 走' }[r] || r
 }
