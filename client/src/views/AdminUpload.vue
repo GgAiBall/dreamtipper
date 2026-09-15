@@ -19,6 +19,31 @@
       </div>
     </div>
 
+    <!-- 表格批量上传 -->
+    <div class="upload-card sheet-card">
+      <div class="sheet-head">
+        <h3>📊 表格批量上传（支持 Excel / CSV / JSON）</h3>
+        <button @click="downloadTemplate" class="btn btn-ghost btn-sm">⬇️ 下载模板</button>
+      </div>
+      <p class="sheet-tip">下载模板后在「扫盘数据」工作表填写每日比赛，表头自动识别（联赛/主队/客队/比赛时间/周几/场次/各玩法推荐/结果）。上传后可直接发布或存为草稿。</p>
+      <div class="sheet-row">
+        <input ref="uploadInput" type="file" accept=".xlsx,.xls,.csv,.json" @change="onFileChange" class="file-input" />
+        <label class="publish-toggle">
+          <input type="checkbox" v-model="autoPublish" /> 上传后直接发布
+        </label>
+        <button @click="handleUpload" class="btn btn-primary" :disabled="uploading || !uploadFile">
+          {{ uploading ? '上传中...' : '📤 上传并导入' }}
+        </button>
+        <span v-if="uploadFile" class="file-name">已选：{{ uploadFile.name }}</span>
+      </div>
+      <div v-if="uploadResult" class="result-msg" :class="uploadResult.error ? 'error' : 'success'">
+        {{ uploadResult.text }}
+        <ul v-if="uploadResult.errors && uploadResult.errors.length" class="err-list">
+          <li v-for="(e, i) in uploadResult.errors" :key="i">⚠️ {{ e }}</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- 新增表单 -->
     <div v-if="showCreate" class="upload-card">
       <h3>新增扫盘草稿</h3>
@@ -306,6 +331,49 @@ async function batchDelete() {
   await loadRecords()
 }
 
+const uploadFile = ref(null)
+const uploadInput = ref(null)
+const autoPublish = ref(false)
+const uploading = ref(false)
+const uploadResult = ref(null)
+
+function onFileChange(e) {
+  const f = e.target.files && e.target.files[0]
+  uploadFile.value = f || null
+  uploadResult.value = null
+}
+
+async function downloadTemplate() {
+  try {
+    const { data } = await api.get('/admin/upload/template', { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'sweep_template.xlsx'; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { alert('下载模板失败: ' + (e.response?.data?.error || e.message)) }
+}
+
+async function handleUpload() {
+  if (!uploadFile.value) { uploadResult.value = { error: true, text: '请先选择 Excel / CSV / JSON 文件' }; return }
+  uploading.value = true; uploadResult.value = null
+  try {
+    const fd = new FormData()
+    fd.append('file', uploadFile.value)
+    fd.append('publish', autoPublish.value ? '1' : '0')
+    const { data } = await api.post('/admin/upload/sweep', fd)
+    uploadResult.value = {
+      error: false,
+      text: `✅ ${data.message}`,
+      errors: data.errors || [],
+    }
+    uploadFile.value = null
+    if (uploadInput.value) uploadInput.value.value = ''
+    await loadRecords()
+  } catch (e) {
+    uploadResult.value = { error: true, text: e.response?.data?.error || '上传失败' }
+  } finally { uploading.value = false }
+}
+
 onMounted(loadRecords)
 </script>
 
@@ -322,6 +390,16 @@ onMounted(loadRecords)
 
 .upload-card { background: #161B22; border: 1px solid #21262D; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
 .upload-card h3 { font-size: 15px; margin-bottom: 16px; }
+
+.sheet-card { border-color: #1F6FEB44; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sheet-tip { color: #8B949E; font-size: 13px; line-height: 1.6; margin: 8px 0 16px; }
+.sheet-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.file-input { color: #C9D1D9; font-size: 13px; max-width: 280px; }
+.publish-toggle { color: #C9D1D9; font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.file-name { color: #58A6FF; font-size: 13px; }
+.err-list { margin: 8px 0 0; padding-left: 18px; color: #F85149; font-size: 12px; }
+.err-list li { margin: 2px 0; }
 
 .form-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }

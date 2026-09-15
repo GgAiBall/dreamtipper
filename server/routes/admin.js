@@ -4,6 +4,7 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { queryAll, queryOne, run } = require('../db');
 const adminAuth = require('../middleware/adminAuth');
+const { parseFile } = require('../sweepParser');
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -32,41 +33,91 @@ router.get('/dashboard', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 文件批量导入扫盘数据 -> 默认 status='pending' (草稿)
+// 文件批量导入扫盘数据（xlsx/xls/csv/json）-> 自动识别列 + 可选自动发布
 router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) => {
+  const fs = require('fs');
   try {
-    const fs = require('fs');
     if (!req.file) return res.status(400).json({ error: '请上传文件' });
-    const ext = req.file.originalname.split('.').pop().toLowerCase();
-    let records = [];
-    if (ext === 'json') {
-      records = JSON.parse(fs.readFileSync(req.file.path, 'utf-8'));
-    } else if (ext === 'csv') {
-      const content = fs.readFileSync(req.file.path, 'utf-8');
-      const lines = content.trim().split('\n');
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-        const obj = {};
-        headers.forEach((h, idx) => obj[h] = values[idx]);
-        records.push(obj);
-      }
+    const doPublish = req.body.publish === '1' || req.body.publish === 'true' || req.body.publish === true;
+    let parsed;
+    try {
+      parsed = parseFile(req.file.path, req.file.originalname);
+    } catch (e) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(400).json({ error: '文件解析失败：' + e.message });
     }
-    let imported = 0;
+    const { records, errors } = parsed;
+    if (!records || records.length === 0) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(400).json({ error: '未识别到有效数据行（需包含 联赛/主队/客队 列）', errors });
+    }
+    let imported = 0, skippedDup = 0;
     for (const r of records) {
-      const id = r.id || uuidv4();
-      await run(`INSERT OR REPLACE INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, published_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-        [id, r.match_id || id, r.league || '', r.home_team || '', r.away_team || '',
-          r.match_time || new Date().toISOString(), r.handicap || '', parseFloat(r.odds) || 0,
-          r.odds_type || '胜平负', parseInt(r.confidence_stars) || 3,
-          r.tier_required || 'free', r.result || 'pending',
-          'pending', req.user.id,
-          r.published_at || null]);
+      const existing = await queryOne(
+        'SELECT id FROM sweep_records WHERE league=? AND home_team=? AND away_team=? AND match_time=? LIMIT 1',
+        [r.league, r.home_team, r.away_team, r.match_time]);
+      if (existing) { skippedDup++; continue; }
+      const id = uuidv4();
+      const status = doPublish ? 'published' : 'pending';
+      const publishedAt = doPublish ? new Date().toISOString() : null;
+      await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        [id, `match-${id}`, r.league, r.home_team, r.away_team,
+          r.match_time || new Date().toISOString(), r.handicap, r.odds,
+          r.odds_type || 'multi', r.confidence_stars,
+          r.tier_required, r.result, status, req.user.id,
+          r.weekday || 0, r.match_no || '', publishedAt]);
       imported++;
     }
-    fs.unlinkSync(req.file.path);
-    res.json({ success: true, imported, message: `已保存 ${imported} 条草稿，可点击单独发布` });
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+    res.json({
+      success: true,
+      imported,
+      skippedDup,
+      published: doPublish,
+      message: doPublish
+        ? `已导入并自动发布 ${imported} 条${skippedDup ? `，跳过重复 ${skippedDup} 条` : ''}`
+        : `已保存 ${imported} 条草稿${skippedDup ? `，跳过重复 ${skippedDup} 条` : ''}，可点击单独发布`,
+      errors: errors.length ? errors : undefined,
+    });
+  } catch (err) {
+    try { if (req.file) fs.unlinkSync(req.file.path); } catch (e) {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 下载扫盘数据 Excel 模板（自动识别列用）
+router.get('/upload/template', adminAuth, (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const header = ['联赛','主队','客队','比赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球推荐','比分推荐','进球推荐','半全场推荐','结果'];
+    const sample = [
+      ['英超','曼联','利物浦','2026-09-16 19:30','周三','001','4','免费','主胜','主-0.5 胜','2:1','2球','胜/胜',''],
+      ['西甲','皇马','巴萨','2026-09-17 22:00','周四','002','5','月度','平','客+0.5 胜','1:1','3球','平/平',''],
+      ['','','','','','','','','','','','','','',''],
+      ['','','','','','','','','','','','','','','（从下一行开始填写你的数据）'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([header, ...sample]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '扫盘数据');
+    const guide = XLSX.utils.aoa_to_sheet([
+      ['字段说明'],
+      ['联赛', '如：英超 / 西甲 / 中超'],
+      ['主队 / 客队', '对阵双方队名'],
+      ['比赛时间', '格式 2026-09-16 19:30（建议文本，勿用 Excel 日期控件）'],
+      ['周几', '周一~周日 或 1~7，留空将按比赛时间自动推算'],
+      ['场次编号', '如 001 / 002，可留空'],
+      ['信心星级', '1~5 整数'],
+      ['权限', '免费 / 月度 / 年度'],
+      ['胜平负推荐/让球推荐/比分推荐/进球推荐/半全场推荐', '各玩法推荐内容，可只填需要的列'],
+      ['结果', '红/胜、黑/负、走/平（留空=待定）'],
+      ['提示', '上传时勾选“上传后直接发布”即可自动上线'],
+    ]);
+    XLSX.utils.book_append_sheet(wb, guide, '填写说明');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', 'attachment; filename="sweep_template.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
