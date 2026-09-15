@@ -165,27 +165,23 @@ function parseRows(rows) {
   return { records, errors, usedHeaders: used };
 }
 
-// 从 multer 保存的文件解析为记录数组
-function parseFile(filePath, originalName) {
-  const ext = (originalName || filePath).split('.').pop().toLowerCase();
+// 从 multer 内存文件（buffer）解析为记录数组
+function parseFile(buffer, originalName) {
+  const ext = (originalName || '').split('.').pop().toLowerCase();
+  const XLSX = require('xlsx');
   if (ext === 'json') {
-    const fs = require('fs');
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const raw = JSON.parse(buffer.toString('utf-8'));
     const rows = Array.isArray(raw) ? raw : (raw.records || []);
     return parseRows(rows);
   }
   if (ext === 'csv') {
-    const fs = require('fs');
-    const XLSX = require('xlsx');
-    const buf = fs.readFileSync(filePath);
-    const wb = XLSX.read(buf, { type: 'buffer', cellText: true });
+    const wb = XLSX.read(buffer, { type: 'buffer', cellText: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
     return parseRows(rows);
   }
   // xlsx / xls
-  const XLSX = require('xlsx');
-  const wb = XLSX.readFile(filePath);
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, cellDates: true });
   return parseRows(rows);

@@ -7,10 +7,7 @@ const adminAuth = require('../middleware/adminAuth');
 const { parseFile } = require('../sweepParser');
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, __dirname + '/../uploads/'),
-    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
@@ -35,20 +32,17 @@ router.get('/dashboard', adminAuth, async (req, res) => {
 
 // 文件批量导入扫盘数据（xlsx/xls/csv/json）-> 自动识别列 + 可选自动发布
 router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) => {
-  const fs = require('fs');
   try {
     if (!req.file) return res.status(400).json({ error: '请上传文件' });
     const doPublish = req.body.publish === '1' || req.body.publish === 'true' || req.body.publish === true;
     let parsed;
     try {
-      parsed = parseFile(req.file.path, req.file.originalname);
+      parsed = parseFile(req.file.buffer, req.file.originalname);
     } catch (e) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
       return res.status(400).json({ error: '文件解析失败：' + e.message });
     }
     const { records, errors } = parsed;
     if (!records || records.length === 0) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
       return res.status(400).json({ error: '未识别到有效数据行（需包含 联赛/主队/客队 列）', errors });
     }
     let imported = 0, skippedDup = 0;
@@ -69,7 +63,6 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
           r.weekday || 0, r.match_no || '', publishedAt]);
       imported++;
     }
-    try { fs.unlinkSync(req.file.path); } catch (_) {}
     res.json({
       success: true,
       imported,
@@ -81,7 +74,6 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
       errors: errors.length ? errors : undefined,
     });
   } catch (err) {
-    try { if (req.file) fs.unlinkSync(req.file.path); } catch (e) {}
     res.status(500).json({ error: err.message });
   }
 });
@@ -222,14 +214,13 @@ router.get('/sweep', adminAuth, async (req, res) => {
 // ========== 方案上传（用户付费解锁的方案）==========
 router.post('/upload/plan', adminAuth, upload.single('file'), async (req, res) => {
   try {
-    const fs = require('fs');
     if (!req.file) return res.status(400).json({ error: '请上传文件' });
     const ext = req.file.originalname.split('.').pop().toLowerCase();
     let items = [];
     if (ext === 'json') {
-      items = JSON.parse(fs.readFileSync(req.file.path, 'utf-8'));
+      items = JSON.parse(req.file.buffer.toString('utf-8'));
     } else if (ext === 'csv') {
-      const content = fs.readFileSync(req.file.path, 'utf-8');
+      const content = req.file.buffer.toString('utf-8');
       const lines = content.trim().split('\n');
       const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
       for (let i = 1; i < lines.length; i++) {
@@ -238,6 +229,8 @@ router.post('/upload/plan', adminAuth, upload.single('file'), async (req, res) =
         headers.forEach((h, idx) => obj[h] = values[idx]);
         items.push(obj);
       }
+    } else {
+      return res.status(400).json({ error: '仅支持 JSON / CSV 格式的方案文件' });
     }
     let imported = 0;
     for (const it of items) {
@@ -249,7 +242,6 @@ router.post('/upload/plan', adminAuth, upload.single('file'), async (req, res) =
           null, it.result || 'pending', parseFloat(it.profit) || 0]);
       imported++;
     }
-    fs.unlinkSync(req.file.path);
     res.json({ success: true, imported, message: `已保存 ${imported} 条方案草稿` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
