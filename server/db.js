@@ -70,6 +70,8 @@ async function initDb() {
 
   await db.execute(`CREATE TABLE IF NOT EXISTS admin_logs (id TEXT PRIMARY KEY, user_id TEXT, action TEXT, detail TEXT, created_at TEXT DEFAULT (datetime('now')))`);
 
+  await db.execute(`CREATE TABLE IF NOT EXISTS user_daily_unlocks (user_id TEXT NOT NULL, unlock_date TEXT NOT NULL, unlocks_used INTEGER DEFAULT 0, PRIMARY KEY (user_id, unlock_date))`);
+
   // 管理员
   const adminExists = await queryOne("SELECT id FROM users WHERE role = 'admin'");
   if (!adminExists) {

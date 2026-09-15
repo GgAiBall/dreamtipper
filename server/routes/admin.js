@@ -285,6 +285,17 @@ router.post('/plans', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── 会员降级（移除特权）──────────────────────────────────────
+router.put('/members/:id/downgrade', adminAuth, async (req, res) => {
+  try {
+    await run(`UPDATE users SET subscription_tier = 'free', subscription_expire = NULL WHERE id = ? AND role = 'user'`,
+      [req.params.id]);
+    await run(`INSERT INTO admin_logs (id, user_id, action, detail) VALUES (?, ?, 'downgrade', ?)`,
+      [uuidv4(), req.user.id, req.params.id]);
+    res.json({ success: true, message: '已降级为免费用户' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── 会员升级（管理员操作）──────────────────────────────────────
 router.put('/members/:id/upgrade', adminAuth, async (req, res) => {
   try {

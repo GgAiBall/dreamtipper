@@ -23,7 +23,7 @@
           <div class="plan-actions">
             <button v-if="auth.tier === p.tier_required" class="btn btn-active" disabled>当前方案</button>
             <button v-else-if="auth.tier === 'yearly'" class="btn btn-ghost" disabled>已享受更优方案</button>
-            <button v-else class="btn btn-primary" @click="subscribe(p)">{{ loading === p.id ? '处理中...' : '立即订阅' }}</button>
+            <button v-else class="btn btn-primary btn-disabled" disabled>联系管理员购买</button>
           </div>
         </div>
       </div>
@@ -58,22 +58,9 @@ import { useRouter } from 'vue-router'
 const auth = useAuthStore()
 const router = useRouter()
 const plans = ref([])
-const loading = ref(false)
 
 const subscriptionPlans = computed(() => plans.value.filter(p => p.price > 0))
 const unlockPlans = computed(() => plans.value.filter(p => p.price === 0 || !p.price))
-
-async function subscribe(plan) {
-  if (!auth.isLoggedIn) return router.push('/login')
-  loading.value = plan.id
-  try {
-    await api.post('/purchases/subscribe', { tier: plan.tier_required })
-    await auth.fetchMe()
-    alert('订阅成功！')
-  } catch (e) {
-    alert('订阅失败: ' + (e.response?.data?.error || e.message))
-  } finally { loading.value = false }
-}
 
 onMounted(async () => {
   const { data } = await api.get('/plans')
@@ -104,5 +91,6 @@ onMounted(async () => {
 .btn-primary { background: #58A6FF; color: #0D1117; width: 100%; justify-content: center; }
 .btn-ghost { background: transparent; color: #8B949E; border: 1px solid #30363D; width: 100%; justify-content: center; }
 .btn-active { background: rgba(63,185,80,0.15); color: #3FB950; border: 1px solid #3FB950; width: 100%; justify-content: center; cursor: default; }
+.btn-disabled { background: rgba(139,148,158,0.1); color: #8B949E; border: 1px solid #30363D; width: 100%; justify-content: center; cursor: not-allowed; opacity: 0.7; }
 .mono { font-family: 'JetBrains Mono', monospace; }
 </style>

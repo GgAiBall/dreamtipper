@@ -32,6 +32,9 @@
           <button v-else @click="startUpgrade(u.id)" class="btn btn-sm btn-ghost" :disabled="u.subscription_tier === 'yearly'" title="升级会员">
             升级
           </button>
+          <button v-if="u.subscription_tier !== 'free'" @click="downgrade(u)" class="btn btn-sm btn-danger-outline" title="移除会员特权，降为免费用户">
+            降级
+          </button>
           <!-- 重置密码 -->
           <button @click="resetPassword(u)" class="btn btn-sm btn-outline" title="重置密码后发临时密码给用户">
             重置密码
@@ -68,6 +71,15 @@ async function doUpgrade(id) {
     cancelAction()
     await loadUsers()
   } catch (e) { showMsg('error', '❌ 升级失败：' + (e.response?.data?.error || e.message)) }
+}
+
+async function downgrade(user) {
+  if (!confirm(`确定将 ${user.email} 降级为免费用户？`)) return
+  try {
+    await api.put(`/admin/members/${user.id}/downgrade`)
+    showMsg('success', `✅ ${user.email} 已降级为免费用户`)
+    await loadUsers()
+  } catch (e) { showMsg('error', '❌ 降级失败：' + (e.response?.data?.error || e.message)) }
 }
 
 async function resetPassword(user) {
@@ -117,6 +129,8 @@ onMounted(loadUsers)
 .btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-outline { background: transparent; color: #58A6FF; border: 1px solid #58A6FF; }
 .btn-outline:hover { background: rgba(88,166,255,0.1); }
+.btn-danger-outline { background: transparent; color: #F85149; border: 1px solid #F85149; }
+.btn-danger-outline:hover { background: rgba(248,81,73,0.1); }
 
 .empty { text-align: center; color: #8B949E; padding: 40px; }
 .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8B949E; }

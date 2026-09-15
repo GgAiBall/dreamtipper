@@ -69,7 +69,7 @@
               <div class="rc-team">{{ r.away_team }}</div>
             </div>
             <div class="rc-info">
-              <span class="rc-handicap" v-if="r.handicap && r.handicap !== '[]'">{{ r.handicap }}</span>
+              <span class="rc-handicap" v-if="r.handicap && r.handicap !== '[]'">{{ formatHandicap(r.handicap) }}</span>
               <span class="rc-odds mono" v-if="r.odds != null && r.odds !== ''">@ {{ r.odds }}</span>
               <span class="rc-stars">
                 <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
@@ -194,6 +194,15 @@ function resultLabel(r) {
 function formatTime(t) {
   if (!t) return ''
   return new Date(t).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+}
+function formatHandicap(h) {
+  if (!h) return ''
+  try {
+    const v = JSON.parse(h)
+    if (Array.isArray(v)) return v.map(p => p.pick).join(' / ')
+    if (v && typeof v === 'object') return Object.values(v).map(p => p.pick || p).join(' / ')
+    return String(h)
+  } catch { return String(h) }
 }
 function winRateClass(w) {
   if (w >= 60) return 'win'
