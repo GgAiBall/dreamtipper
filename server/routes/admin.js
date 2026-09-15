@@ -118,14 +118,16 @@ router.post('/sweep', adminAuth, async (req, res) => {
   try {
     const data = req.body;
     const id = data.id || uuidv4();
-    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [id, data.match_id || id, data.league || '', data.home_team || '', data.away_team || '',
+    const _params = [id, data.match_id || id, data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '', parseFloat(data.odds) || 0,
         data.odds_type || '胜平负', parseInt(data.confidence_stars) || 3,
         data.tier_required || 'free', data.result || 'pending',
         'pending', req.user.id,
-        parseInt(data.weekday) || 0, data.match_no || '']);
+        parseInt(data.weekday) || 0, data.match_no || ''];
+    console.error('INSERT params count:', _params.length, '|', JSON.stringify(_params));
+    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      _params);
     if (!ok) return res.status(500).json({ error: '数据库写入失败' });
     res.json({ success: true, id, message: '已保存为草稿' });
   } catch (err) { res.status(500).json({ error: err.message }); }
