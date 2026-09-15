@@ -15,8 +15,8 @@ body {
   color: #E6EDF3;
   line-height: 1.6;
 }
-a { color: #58A6FF; text-decoration: none; }
-a:hover { color: #79B8FF; }
+a { color: #58A6FF; text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #79B8FF; text-decoration: underline; }
 input, select, textarea, button {
   font-family: 'Noto Sans SC', sans-serif;
 }
