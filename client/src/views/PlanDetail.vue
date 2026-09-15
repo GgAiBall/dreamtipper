@@ -14,6 +14,7 @@
             <div class="sp-item"><span>胜率</span><strong class="mono" :class="winClass(stats.win_rate)">{{ stats.win_rate }}%</strong></div>
             <div class="sp-item"><span>总场次</span><strong class="mono">{{ stats.total }}</strong></div>
             <div class="sp-item"><span>胜/负/走</span><strong class="mono">{{ stats.wins }} / {{ stats.losses }} / {{ stats.pushes }}</strong></div>
+            <div class="sp-item"><span>赔率展示</span><strong class="mono" :class="stats.avg_odds > 0 ? 'win' : 'loss'">{{ stats.avg_odds > 0 ? stats.avg_odds.toFixed(2) : '-' }}</strong></div>
             <div class="sp-item"><span>总收益</span><strong class="mono" :class="stats.total_profit >= 0 ? 'win' : 'loss'">{{ stats.total_profit >= 0 ? '+' : '' }}{{ stats.total_profit }}</strong></div>
           </div>
           <div ref="chartRef" class="chart"></div>

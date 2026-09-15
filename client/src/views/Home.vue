@@ -69,8 +69,8 @@
               <div class="rc-team">{{ r.away_team }}</div>
             </div>
             <div class="rc-info">
-              <span class="rc-handicap" v-if="r.handicap">{{ r.handicap }}</span>
-              <span class="rc-odds mono" v-if="r.odds">@ {{ r.odds }}</span>
+              <span class="rc-handicap" v-if="r.handicap && r.handicap !== '[]'">{{ r.handicap }}</span>
+              <span class="rc-odds mono" v-if="r.odds != null && r.odds !== ''">@ {{ r.odds }}</span>
               <span class="rc-stars">
                 <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
               </span>
