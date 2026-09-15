@@ -4,9 +4,9 @@ const { v4: uuidv4 } = require('uuid');
 const { queryAll, queryOne, run } = require('../db');
 const auth = require('../middleware/auth');
 
-router.get('/me', auth, (req, res) => {
+router.get('/me', auth, async (req, res) => {
   try {
-    const purchases = queryAll(`
+    const purchases = await queryAll(`
       SELECT p.*, pl.name as plan_name, pl.price as plan_price
       FROM user_purchases p
       LEFT JOIN plans pl ON p.plan_id = pl.id
@@ -17,7 +17,7 @@ router.get('/me', auth, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/subscribe', auth, (req, res) => {
+router.post('/subscribe', auth, async (req, res) => {
   try {
     const { tier } = req.body;
     const prices = { monthly: 19900, yearly: 99900 };
@@ -28,13 +28,13 @@ router.post('/subscribe', auth, (req, res) => {
       ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    run(`INSERT INTO user_purchases (id, user_id, type, amount, status, paid_at, expire_at) VALUES (?, ?, 'subscription', ?, 'paid', datetime('now'), ?)`,
+    await run(`INSERT INTO user_purchases (id, user_id, type, amount, status, paid_at, expire_at) VALUES (?, ?, 'subscription', ?, 'paid', datetime('now'), ?)`,
       [purchaseId, req.params.user.id, prices[tier], expireAt]);
 
-    run(`UPDATE users SET subscription_tier = ?, subscription_expire = ? WHERE id = ?`,
+    await run(`UPDATE users SET subscription_tier = ?, subscription_expire = ? WHERE id = ?`,
       [tier, expireAt, req.params.user.id]);
 
-    const user = queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire FROM users WHERE id = ?', [req.params.user.id]);
+    const user = await queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire FROM users WHERE id = ?', [req.params.user.id]);
     res.json({ success: true, user });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

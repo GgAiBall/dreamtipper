@@ -19,3 +19,8 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 30d
+      # Turso 云数据库（在 Render 控制台手动填入，不要写进代码仓库）
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false

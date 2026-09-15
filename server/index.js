@@ -15,7 +15,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -36,7 +36,7 @@ async function start() {
   if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
     // SPA fallback: 任何非 /api 路径都返回 index.html（让 Vue Router 处理）
-    app.get(/^(?!\/api).*/, (req, res) => {
+    app.get(/^(?!\/api).*/, async (req, res) => {
       res.sendFile(path.join(clientDist, 'index.html'));
     });
     console.log(`📦 前端静态文件托管于: ${clientDist}`);

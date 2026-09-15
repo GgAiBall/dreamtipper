@@ -18,17 +18,17 @@ router.post('/register', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: '邮箱和密码不能为空' });
     if (password.length < 6) return res.status(400).json({ error: '密码至少6位' });
 
-    const exists = queryOne('SELECT id FROM users WHERE email = ?', [email]);
+    const exists = await queryOne('SELECT id FROM users WHERE email = ?', [email]);
     if (exists) return res.status(409).json({ error: '该邮箱已注册' });
 
     const hash = bcrypt.hashSync(password, 10);
     const id = uuidv4();
     const name = nickname || email.split('@')[0];
 
-    run(`INSERT INTO users (id, email, password_hash, nickname, role, subscription_tier) VALUES (?, ?, ?, ?, 'user', 'free')`,
+    await run(`INSERT INTO users (id, email, password_hash, nickname, role, subscription_tier) VALUES (?, ?, ?, ?, 'user', 'free')`,
       [id, email, hash, name]);
 
-    const user = queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire, created_at FROM users WHERE id = ?', [id]);
+    const user = await queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire, created_at FROM users WHERE id = ?', [id]);
     const token = signToken(user);
     res.json({ token, user });
   } catch (err) {
@@ -39,7 +39,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = queryOne('SELECT * FROM users WHERE email = ?', [email]);
+    const user = await queryOne('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) return res.status(401).json({ error: '邮箱或密码错误' });
 
     const valid = bcrypt.compareSync(password, user.password_hash);
@@ -53,15 +53,15 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.get('/me', require('../middleware/auth'), (req, res) => {
-  const user = queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire, created_at FROM users WHERE id = ?', [req.user.id]);
+router.get('/me', require('../middleware/auth'), async (req, res) => {
+  const user = await queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire, created_at FROM users WHERE id = ?', [req.user.id]);
   res.json({ user });
 });
 
-router.put('/profile', require('../middleware/auth'), (req, res) => {
+router.put('/profile', require('../middleware/auth'), async (req, res) => {
   const { nickname } = req.body;
-  run('UPDATE users SET nickname = ? WHERE id = ?', [nickname, req.user.id]);
-  const user = queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire, created_at FROM users WHERE id = ?', [req.user.id]);
+  await run('UPDATE users SET nickname = ? WHERE id = ?', [nickname, req.user.id]);
+  const user = await queryOne('SELECT id, email, nickname, role, subscription_tier, subscription_expire, created_at FROM users WHERE id = ?', [req.user.id]);
   res.json({ user });
 });
 

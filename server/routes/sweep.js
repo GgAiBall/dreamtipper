@@ -10,7 +10,7 @@ function getUserTier(user) {
 }
 function tierLevel(tier) { return { free: 0, monthly: 1, yearly: 2 }[tier] || 0; }
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { date, league, page = 1, limit = 50 } = req.query;
 
@@ -20,7 +20,7 @@ router.get('/', (req, res) => {
       try {
         const jwt = require('jsonwebtoken');
         const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'dreamtipper-secret-key-2024');
-        const user = queryOne('SELECT subscription_tier FROM users WHERE id = ?', [decoded.id]);
+        const user = await queryOne('SELECT subscription_tier FROM users WHERE id = ?', [decoded.id]);
         if (user) userTier = getUserTier(user);
       } catch (e) {}
     }
@@ -34,8 +34,8 @@ router.get('/', (req, res) => {
     sql += ` LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), offset);
 
-    const rows = queryAll(sql, params);
-    const totalObj = queryOne(`SELECT COUNT(*) as c FROM sweep_records WHERE status != 'pending'`);
+    const rows = await queryAll(sql, params);
+    const totalObj = await queryOne(`SELECT COUNT(*) as c FROM sweep_records WHERE status != 'pending'`);
     const total = totalObj?.c || 0;
 
     const userLevel = tierLevel(userTier);
@@ -51,9 +51,9 @@ router.get('/', (req, res) => {
   }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const record = queryOne('SELECT * FROM sweep_records WHERE id = ?', [req.params.id]);
+    const record = await queryOne('SELECT * FROM sweep_records WHERE id = ?', [req.params.id]);
     if (!record) return res.status(404).json({ error: '记录不存在' });
     res.json({ record });
   } catch (err) {
