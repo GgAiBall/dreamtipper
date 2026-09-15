@@ -194,7 +194,7 @@ router.get('/sweep', adminAuth, async (req, res) => {
     const { date, league, page = 1, limit = 50, status, weekday } = req.query;
     let sql = `SELECT * FROM sweep_records WHERE 1=1`;
     const params = [];
-    if (date) { sql += ` AND date(match_time) = ?`; params.push(date); }
+    if (date) { sql += ` AND date(created_at) = ?`; params.push(date); }
     if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); }
     if (status) { sql += ` AND status = ?`; params.push(status); }
     if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); }
@@ -203,7 +203,7 @@ router.get('/sweep', adminAuth, async (req, res) => {
     const records = await queryAll(sql, params);
     let totalSql = 'SELECT COUNT(*) as c FROM sweep_records WHERE 1=1';
     const totalParams = [];
-    if (date) { totalSql += ` AND date(match_time) = ?`; totalParams.push(date); }
+    if (date) { totalSql += ` AND date(created_at) = ?`; totalParams.push(date); }
     if (league) { totalSql += ` AND league LIKE ?`; totalParams.push(`%${league}%`); }
     if (status) { totalSql += ` AND status = ?`; totalParams.push(status); }
     if (weekday) { totalSql += ` AND weekday = ?`; totalParams.push(parseInt(weekday)); }

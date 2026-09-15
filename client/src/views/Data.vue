@@ -6,13 +6,6 @@
     </div>
 
     <div class="filters">
-      <input v-model="dateFilter" type="date" class="filter-input" @change="loadData" />
-      <input v-model="leagueFilter" type="text" placeholder="搜索联赛..." class="filter-input" @input="debouncedLoad" />
-      <div class="filter-weekday-tabs">
-        <button v-for="d in weekdays" :key="d.value" :class="{ active: weekdayFilter === d.value }"
-          @click="weekdayFilter = weekdayFilter === d.value ? null : d.value; loadData()">{{ d.label }}</button>
-        <button v-if="weekdayFilter" @click="weekdayFilter = null; loadData()" class="clear-btn">× 清除</button>
-      </div>
       <button @click="loadData" class="btn btn-primary btn-sm">刷新</button>
       <router-link to="/admin/upload" v-if="auth.isAdmin" class="btn btn-ghost btn-sm">上传数据</router-link>
       <!-- 管理员批量操作 -->
@@ -20,6 +13,27 @@
         <span class="divider-v"></span>
         <button @click="selectAll" class="btn btn-ghost btn-sm">全选</button>
         <button @click="deselectAll" class="btn btn-ghost btn-sm">反选</button>
+      </template>
+      <span class="divider-v"></span>
+      <!-- 辅助筛选：默认收起，手机点击展开 -->
+      <button class="btn btn-ghost btn-sm" @click="showFilters = !showFilters">
+        🔍 筛选 {{ (dateFilter || leagueFilter || weekdayFilter) ? '·' : '' }}
+      </button>
+    </div>
+    <div class="filters filters-advanced" v-show="showFilters">
+      <input v-model="leagueFilter" type="text" placeholder="搜索联赛..." class="filter-input" @input="debouncedLoad" />
+      <div class="filter-weekday-tabs">
+        <button v-for="d in weekdays" :key="d.value" :class="{ active: weekdayFilter === d.value }"
+          @click="weekdayFilter = weekdayFilter === d.value ? null : d.value; loadData()">{{ d.label }}</button>
+      </div>
+      <div class="filter-date-wrap">
+        <input v-model="dateFilter" type="date" class="filter-input" @change="loadData" title="按上传日期筛选" />
+        <button v-if="dateFilter" @click="dateFilter = ''; loadData()" class="clear-btn" title="清除日期">✕</button>
+      </div>
+      <button v-if="dateFilter || leagueFilter || weekdayFilter" @click="clearAllFilters" class="btn btn-ghost btn-sm clear-all">✕ 清除全部</button>
+    </div>
+    <div class="filters" v-show="selectedIds.size > 0 || (auth.isLoggedIn && auth.tier === 'free')">
+      <template v-if="auth.isAdmin">
         <button v-if="selectedIds.size > 0" @click="confirmBatchDelete" class="btn btn-danger btn-sm">
           删除所选 <span class="badge">{{ selectedIds.size }}</span>
         </button>
@@ -127,9 +141,11 @@ import { api } from '@/stores/auth'
 const auth = useAuthStore()
 const records = ref([])
 const loading = ref(false)
-const dateFilter = ref(new Date().toISOString().split('T')[0])
+const dateFilter = ref('')
 const leagueFilter = ref('')
 const weekdayFilter = ref(null)
+const showFilters = ref(false)
+function clearAllFilters() { dateFilter.value = ''; leagueFilter.value = ''; weekdayFilter.value = null; loadData() }
 const weekdays = [{value:1,label:'周一'},{value:2,label:'周二'},{value:3,label:'周三'},{value:4,label:'周四'},{value:5,label:'周五'},{value:6,label:'周六'},{value:7,label:'周日'}]
 const page = ref(1)
 const limit = 30
@@ -226,7 +242,16 @@ onMounted(loadData)
 .page-header h1 { font-size: 28px; margin-bottom: 8px; }
 .page-header p { color: #8B949E; font-size: 14px; }
 .filters { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; flex-wrap: wrap; }
+.filters-advanced { margin-top: -12px; padding: 12px 14px; background: rgba(22,27,34,0.4); border: 1px solid #21262D; border-radius: 8px; }
 .filter-input { padding: 8px 12px; background: #161B22; border: 1px solid #30363D; border-radius: 8px; color: #E6EDF3; font-size: 14px; }
+.filter-date-wrap { position: relative; display: flex; align-items: center; gap: 6px; }
+.filter-date-wrap .filter-input { padding-right: 36px; }
+.filter-date-wrap .clear-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; padding: 0; line-height: 1; }
+.filter-weekday-tabs { display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; scrollbar-width: none; }
+.filter-weekday-tabs::-webkit-scrollbar { display: none; }
+.filter-weekday-tabs button { flex-shrink: 0; padding: 6px 10px; background: #161B22; border: 1px solid #30363D; border-radius: 6px; color: #8B949E; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.filter-weekday-tabs button.active { background: #1F6FEB; border-color: #1F6FEB; color: #fff; }
+.clear-all { color: #F85149; border-color: #F85149; }
 .divider-v { width: 1px; height: 20px; background: #30363D; }
 .unlock-tip { font-size: 12px; color: #F0883E; margin-left: 4px; }
 .unlock-desc { color: #8B949E; margin-left: 4px; }

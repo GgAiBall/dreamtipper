@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
     let sql = `SELECT * FROM sweep_records WHERE status != 'pending'`;
     const params = [];
     const totalParams = [];
-    if (date) { sql += ` AND date(match_time) = ?`; params.push(date); totalParams.push(date); }
+    if (date) { sql += ` AND date(created_at) = ?`; params.push(date); totalParams.push(date); }
     if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); totalParams.push(`%${league}%`); }
     if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); totalParams.push(parseInt(weekday)); }
     sql += ` ORDER BY match_time DESC`;
@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
 
     const rows = await queryAll(sql, params);
     let totalSql = `SELECT COUNT(*) as c FROM sweep_records WHERE status != 'pending'`;
-    if (date) totalSql += ` AND date(match_time) = ?`;
+    if (date) totalSql += ` AND date(created_at) = ?`;
     if (league) totalSql += ` AND league LIKE ?`;
     if (weekday) totalSql += ` AND weekday = ?`;
     const totalObj = await queryOne(totalSql, totalParams);
