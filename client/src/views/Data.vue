@@ -251,7 +251,7 @@ onMounted(loadData)
 .check-cell { display: flex; justify-content: center; }
 
 .league-tag { font-size: 11px; color: #58A6FF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.plays { display: flex; flex-direction: column; gap: 4px; }
+.plays { display: flex; flex-direction: column; gap: 4px; align-self: start; }
 .play-line { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: rgba(33,38,45,0.5); }
 .play-line.win { background: rgba(63,185,80,0.1); }
 .play-line.loss { background: rgba(248,81,73,0.1); }
