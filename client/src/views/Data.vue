@@ -262,22 +262,6 @@ onMounted(loadData)
 .msg-close { background: none; border: none; color: inherit; cursor: pointer; font-size: 18px; padding: 0 4px; }
 
 .records-table { background: #161B22; border: 1px solid #21262D; border-radius: 12px; overflow: hidden; }
-@media (max-width: 768px) {
-  .records-table { background: transparent; border: none; }
-  .table-header { display: none; }
-  .table-row { display: flex; flex-direction: column; gap: 10px; padding: 14px; margin-bottom: 12px; background: #161B22; border: 1px solid #21262D; border-radius: 12px; }
-  .table-row > .check-cell { order: -1; align-self: flex-start; }
-  .table-row > .match-no-cell { order: 0; font-weight: 700; font-size: 15px; }
-  .table-row > .league-cell { order: 1; font-size: 12px; color: #58A6FF; }
-  .table-row > .home-team, .table-row > .away-team { order: 2; font-size: 16px; }
-  .table-row > .time-cell { order: 3; color: #8B949E; font-size: 12px; }
-  .table-row > .plays { order: 4; width: 100%; }
-  .table-row > .stars-cell { order: 5; }
-  .table-row > .tier-cell { order: 5; }
-  .table-row > .result-cell { order: 6; }
-  .table-row > .unlock-cell { order: 7; }
-  .table-row.selected { background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.3); }
-}
 .table-header, .table-row { display: grid; gap: 12px; padding: 12px 16px; align-items: center; font-size: 13px; }
 .table-header { background: #21262D; border-radius: 8px 8px 0 0; color: #8B949E; font-size: 12px; font-weight: 600; }
 .table-row { border-bottom: 1px solid #21262D; transition: background 0.15s; }
@@ -341,4 +325,26 @@ onMounted(loadData)
 .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
 .badge { background: rgba(248,81,73,0.2); color: #F85149; border-radius: 10px; padding: 1px 6px; font-size: 11px; margin-left: 4px; }
 .mono { font-family: 'JetBrains Mono', monospace; }
+
+/* 手机竖屏：表格转卡片布局（放在末尾以保证样式优先级） */
+@media (max-width: 768px) {
+  .records-table { background: transparent; border: none; }
+  .table-header { display: none; }
+  .table-row {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px; margin-bottom: 12px;
+    background: #161B22; border: 1px solid #21262D; border-radius: 12px;
+  }
+  .table-row > .check-cell { order: -1; align-self: flex-start; }
+  .table-row > .match-no-cell { order: 0; font-weight: 700; font-size: 15px; }
+  .table-row > .league-cell { order: 1; font-size: 12px; color: #58A6FF; }
+  .table-row > .home-team, .table-row > .away-team { order: 2; font-size: 16px; }
+  .table-row > .time-cell { order: 3; color: #8B949E; font-size: 12px; }
+  .table-row > .plays { order: 4; width: 100%; }
+  .table-row > .stars-cell { order: 5; }
+  .table-row > .tier-cell { order: 5; }
+  .table-row > .result-cell { order: 6; }
+  .table-row > .unlock-cell { order: 7; }
+  .table-row.selected { background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.3); }
+}
 </style>
