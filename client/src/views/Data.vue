@@ -160,6 +160,7 @@ const deletedCount = ref(0)
 
 // 解锁
 const dailyUnlocksLeft = ref(3)
+const unlockedIds = ref([])
 const unlockingId = ref('')
 const unlockMsg = ref({ type: 'info', text: '' })
 
@@ -184,8 +185,13 @@ async function unlockRecord(r) {
   try {
     const { data } = await api.post(`/purchases/unlock/${r.id}`)
     dailyUnlocksLeft.value = data.unlocksLeft
-    showMsg('success', `✅ 解锁成功！今日剩余 ${data.unlocksLeft} 次`)
+    // 乐观更新本地状态：立即把该 ID 加入已解锁集合，不等后端 loadData 回来
+    if (data.unlockedId && !unlockedIds.value.includes(data.unlockedId)) {
+      unlockedIds.value.push(data.unlockedId)
+    }
+    // 重新拉数据（后端会返回完整 fields + 最新 unlockedIds）
     await loadData()
+    showMsg('success', `✅ 解锁成功！今日剩余 ${data.unlocksLeft} 次`)
   } catch (e) { showMsg('error', '解锁失败：' + (e.response?.data?.error || e.message)) }
   finally { unlockingId.value = '' }
 }
@@ -221,6 +227,8 @@ async function loadData() {
     const { data } = await api.get('/sweep', { params })
     records.value = data.records
     total.value = data.total
+    // 后端返回的 unlockedIds 代表本用户已解锁的扫盘 ID 集合（即使是免费用户也能看到完整字段）
+    unlockedIds.value = data.unlockedIds || []
     if (auth.isLoggedIn && auth.tier === 'free') {
       const unlockRes = await api.get('/purchases/unlocks-left').catch(() => ({ data: { left: 0 } }))
       dailyUnlocksLeft.value = unlockRes.data?.left ?? 0

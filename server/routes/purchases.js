@@ -26,10 +26,17 @@ router.post('/unlock/:sweepId', auth, async (req, res) => {
     // 日期不是今天则重置计数
     const used = (user?.unlock_date === today) ? Number(user?.unlock_used_today || 0) : 0;
     if (used >= 3) return res.status(403).json({ error: '今日解锁次数已用完（每日免费3次）' });
-    // UPDATE 计数（users 表已有 unlock_used_today + unlock_date 列）
+    // 检查 sweep 存在
+    const sweep = await queryOne('SELECT id, tier_required FROM sweep_records WHERE id = ?', [req.params.sweepId]);
+    if (!sweep) return res.status(404).json({ error: '扫盘记录不存在' });
+    // INSERT user_unlocks（防重复解锁同一场：UNIQUE 约束 + INSERT OR IGNORE）
+    const unlockId = uuidv4();
+    await run(`INSERT OR IGNORE INTO user_unlocks (id, user_id, sweep_id, created_at) VALUES (?, ?, ?, datetime('now'))`,
+      [unlockId, req.user.id, req.params.sweepId]);
+    // UPDATE 计数
     await run(`UPDATE users SET unlock_used_today = unlock_used_today + 1, unlock_date = ? WHERE id = ?`,
       [today, req.user.id]);
-    res.json({ success: true, unlocksLeft: Math.max(0, 3 - used - 1), used: used + 1 });
+    res.json({ success: true, unlocksLeft: Math.max(0, 3 - used - 1), used: used + 1, unlockedId: req.params.sweepId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

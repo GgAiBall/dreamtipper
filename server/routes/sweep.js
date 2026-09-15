@@ -44,14 +44,28 @@ router.get('/', async (req, res) => {
     const totalObj = await queryOne(totalSql, totalParams);
     const total = totalObj?.c || 0;
 
+    // 查询当前用户已解锁的扫盘 ID 列表
+    let unlockedIds = [];
+    if (userTier === 'free' && authHeader) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(authHeader.replace('Bearer ', ''), process.env.JWT_SECRET || 'dreamtipper-secret-key-2024');
+        const unlocked = await queryAll('SELECT sweep_id FROM user_unlocks WHERE user_id = ?', [decoded.id]);
+        unlockedIds = unlocked.map(u => u.sweep_id);
+      } catch (e) {}
+    }
+
     const userLevel = tierLevel(userTier);
     const filtered = rows.map(r => {
       const reqLevel = tierLevel(r.tier_required);
-      if (reqLevel > userLevel) return { ...r, odds: null, handicap: null, confidence_stars: null, result: null };
+      // 免费用户已解锁过的场次依然返回完整数据
+      if (reqLevel > userLevel && !unlockedIds.includes(r.id)) {
+        return { ...r, odds: null, handicap: null, confidence_stars: null, result: null };
+      }
       return r;
     });
 
-    res.json({ records: filtered, total, page: parseInt(page), limit: parseInt(limit) });
+    res.json({ records: filtered, total, page: parseInt(page), limit: parseInt(limit), unlockedIds });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

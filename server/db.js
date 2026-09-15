@@ -70,6 +70,9 @@ async function initDb() {
 
   await db.execute(`CREATE TABLE IF NOT EXISTS admin_logs (id TEXT PRIMARY KEY, user_id TEXT, action TEXT, detail TEXT, created_at TEXT DEFAULT (datetime('now')))`);
 
+  // 用户解锁记录表（免费用户每日 3 次解锁会员场次的记录）
+  await db.execute(`CREATE TABLE IF NOT EXISTS user_unlocks (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sweep_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(user_id, sweep_id))`);
+
   // 每日解锁计数列（try 防已存在时 ALTER 报错）
   try { await db.execute(`ALTER TABLE users ADD COLUMN unlock_used_today INTEGER DEFAULT 0`); } catch (e) {}
   try { await db.execute(`ALTER TABLE users ADD COLUMN unlock_date TEXT`); } catch (e) {}
