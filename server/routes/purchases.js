@@ -8,31 +8,32 @@ const auth = require('../middleware/auth');
 router.get('/unlocks-left', auth, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const row = await queryOne('SELECT COALESCE(SUM(unlocks_used),0) as c FROM user_daily_unlocks WHERE user_id = ? AND unlock_date = ?',
+    const row = await queryOne('SELECT unlocks_used FROM user_daily_unlocks WHERE user_id = ? AND unlock_date = ?',
       [req.user.id, today]);
-    const used = Number(row?.c || 0);
+    const used = Number(row?.unlocks_used || 0);
     res.json({ left: Math.max(0, 3 - used), used, daily_limit: 3 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── 解锁单条扫盘记录（免费用户每日3次）─────────────────────
+// Turso SQLite 不支持 ON CONFLICT DO UPDATE，改用 INSERT OR IGNORE + UPDATE 两步
 router.post('/unlock/:sweepId', auth, async (req, res) => {
   try {
     const user = await queryOne('SELECT subscription_tier FROM users WHERE id = ?', [req.user.id]);
     if (user?.subscription_tier !== 'free') {
       return res.json({ success: true, message: '会员无需解锁', unlocksLeft: 999 });
     }
-    // 检查今日已用次数
     const today = new Date().toISOString().split('T')[0];
-    const row = await queryOne('SELECT COALESCE(SUM(unlocks_used),0) as c FROM user_daily_unlocks WHERE user_id = ? AND unlock_date = ?',
+    // 先查当前次数
+    const row = await queryOne('SELECT unlocks_used FROM user_daily_unlocks WHERE user_id = ? AND unlock_date = ?',
       [req.user.id, today]);
-    const used = Number(row?.c || 0);
+    const used = Number(row?.unlocks_used || 0);
     if (used >= 3) return res.status(403).json({ error: '今日解锁次数已用完（每日免费3次）' });
-    // 记录解锁
-    await run(`INSERT INTO user_daily_unlocks (id, user_id, unlock_date, unlocks_used) VALUES (?, ?, ?, 1)
-      ON CONFLICT(user_id, unlock_date) DO UPDATE SET unlocks_used = unlocks_used + 1`,
+    // INSERT OR IGNORE（创建行，unlocks_used=0）后 UPDATE（加1）
+    await run(`INSERT OR IGNORE INTO user_daily_unlocks (id, user_id, unlock_date, unlocks_used) VALUES (?, ?, ?, 0)`,
       [uuidv4(), req.user.id, today]);
-    // 返回剩余次数
+    await run(`UPDATE user_daily_unlocks SET unlocks_used = unlocks_used + 1 WHERE user_id = ? AND unlock_date = ?`,
+      [req.user.id, today]);
     const newUsed = used + 1;
     res.json({ success: true, unlocksLeft: Math.max(0, 3 - newUsed), used: newUsed });
   } catch (err) { res.status(500).json({ error: err.message }); }
