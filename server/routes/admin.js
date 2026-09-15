@@ -157,8 +157,13 @@ router.get('/sweep', adminAuth, async (req, res) => {
     sql += ` ORDER BY updated_at DESC, match_time DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), (parseInt(page) - 1) * parseInt(limit));
     const records = await queryAll(sql, params);
-    const total = (await queryOne('SELECT COUNT(*) as c FROM sweep_records WHERE 1=1' +
-      (status ? ' AND status = ?' : ''), status ? [status] : []))?.c || 0;
+    let totalSql = 'SELECT COUNT(*) as c FROM sweep_records WHERE 1=1';
+    const totalParams = [];
+    if (date) { totalSql += ` AND date(match_time) = ?`; totalParams.push(date); }
+    if (league) { totalSql += ` AND league LIKE ?`; totalParams.push(`%${league}%`); }
+    if (status) { totalSql += ` AND status = ?`; totalParams.push(status); }
+    if (weekday) { totalSql += ` AND weekday = ?`; totalParams.push(parseInt(weekday)); }
+    const total = (await queryOne(totalSql, totalParams))?.c || 0;
     res.json({ records, total });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
