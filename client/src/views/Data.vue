@@ -67,11 +67,11 @@
         <span class="check-cell" v-if="auth.isAdmin">
           <input type="checkbox" :value="r.id" v-model="selectedIdsArr" />
         </span>
-        <span class="mono match-no">{{ weekdayShort(r.weekday) }}{{ r.match_no }}</span>
-        <span class="league-tag">{{ r.league }}</span>
-        <span>{{ r.home_team }}</span>
-        <span>{{ r.away_team }}</span>
-        <span class="mono">{{ formatTime(r.match_time) }}</span>
+        <span class="mono match-no-cell">{{ weekdayShort(r.weekday) }}{{ r.match_no }}</span>
+        <span class="league-tag league-cell">{{ r.league }}</span>
+        <span class="home-team">{{ r.home_team }}</span>
+        <span class="away-team">{{ r.away_team }}</span>
+        <span class="mono time-cell">{{ formatTime(r.match_time) }}</span>
 
         <!-- 玩法列：已解锁/免费记录显示玩法；未解锁显示锁定提示 -->
         <div class="plays" v-if="r.odds != null">
@@ -88,11 +88,11 @@
           </div>
         </div>
 
-        <span class="stars">
+        <span class="stars stars-cell">
           <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
         </span>
-        <span class="tier-tag" :class="r.tier_required">{{ tierTag(r.tier_required) }}</span>
-        <span class="result-tag" :class="r.result">{{ resultLabel(r.result) }}</span>
+        <span class="tier-tag tier-cell" :class="r.tier_required">{{ tierTag(r.tier_required) }}</span>
+        <span class="result-tag result-cell" :class="r.result">{{ resultLabel(r.result) }}</span>
 
         <!-- 免费用户解锁按钮 -->
         <span v-if="auth.isLoggedIn && auth.tier === 'free'" class="unlock-cell">
@@ -262,6 +262,22 @@ onMounted(loadData)
 .msg-close { background: none; border: none; color: inherit; cursor: pointer; font-size: 18px; padding: 0 4px; }
 
 .records-table { background: #161B22; border: 1px solid #21262D; border-radius: 12px; overflow: hidden; }
+@media (max-width: 768px) {
+  .records-table { background: transparent; border: none; }
+  .table-header { display: none; }
+  .table-row { display: flex; flex-direction: column; gap: 10px; padding: 14px; margin-bottom: 12px; background: #161B22; border: 1px solid #21262D; border-radius: 12px; }
+  .table-row > .check-cell { order: -1; align-self: flex-start; }
+  .table-row > .match-no-cell { order: 0; font-weight: 700; font-size: 15px; }
+  .table-row > .league-cell { order: 1; font-size: 12px; color: #58A6FF; }
+  .table-row > .home-team, .table-row > .away-team { order: 2; font-size: 16px; }
+  .table-row > .time-cell { order: 3; color: #8B949E; font-size: 12px; }
+  .table-row > .plays { order: 4; width: 100%; }
+  .table-row > .stars-cell { order: 5; }
+  .table-row > .tier-cell { order: 5; }
+  .table-row > .result-cell { order: 6; }
+  .table-row > .unlock-cell { order: 7; }
+  .table-row.selected { background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.3); }
+}
 .table-header, .table-row { display: grid; gap: 12px; padding: 12px 16px; align-items: center; font-size: 13px; }
 .table-header { background: #21262D; border-radius: 8px 8px 0 0; color: #8B949E; font-size: 12px; font-weight: 600; }
 .table-row { border-bottom: 1px solid #21262D; transition: background 0.15s; }
