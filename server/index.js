@@ -19,6 +19,18 @@ app.get('/api/health', async (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// 调试 endpoint: 直接写入 Turso 并立刻查询验证
+app.get('/api/_debug_write', async (req, res) => {
+  const { run, queryOne, queryAll } = require('./db');
+  try {
+    const tag = 'DEBUG_' + Date.now();
+    const ok = await run('INSERT INTO sweep_records (id, league, home_team, away_team, match_time, handicap, status, tier_required, match_no, weekday, confidence_stars) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      [tag, '调试', 'D-主', 'D-客', new Date().toISOString(), '[]', 'pending', 'free', tag, 1, 3]);
+    const found = await queryOne('SELECT id, home_team, match_no FROM sweep_records WHERE id = ?', [tag]);
+    res.json({ ok, tag, found });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // 启动
 async function start() {
   await initDb();
