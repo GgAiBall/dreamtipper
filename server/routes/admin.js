@@ -123,7 +123,7 @@ router.post('/sweep', adminAuth, async (req, res) => {
         data.odds_type || '胜平负', parseInt(data.confidence_stars) || 3,
         data.tier_required || 'free', data.result || 'pending',
         'pending', req.user.id,
-        parseInt(data.weekday) || 0, data.match_no || ''];
+        parseInt(data.weekday) || 0, data.match_no || '', null];
     console.error('INSERT params count:', _params.length, '|', JSON.stringify(_params));
     const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
