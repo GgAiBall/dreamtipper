@@ -18,6 +18,7 @@
           </div>
         </div>
         <div class="pi-actions">
+          <button @click="toggleActive(p)" class="btn btn-sm" :class="p.is_active ? 'btn-ghost' : 'btn-primary'" :disabled="toggling === p.id">{{ toggling === p.id ? '处理中...' : (p.is_active ? '下架' : '上架') }}</button>
           <button @click="editPlan(p)" class="btn btn-ghost btn-sm">编辑</button>
         </div>
       </div>
@@ -33,6 +34,9 @@
             <select v-model="form.tier_required">
               <option value="free">免费可见</option><option value="monthly">月度可见</option><option value="yearly">年度可见</option>
             </select>
+          </div>
+          <div class="form-group"><label>上架状态</label>
+            <label class="switch"><input type="checkbox" v-model="form.is_active" :true-value="1" :false-value="0" /> 立即上架公开</label>
           </div>
         </div>
         <div class="form-group"><label>描述</label><textarea v-model="form.description" rows="3" placeholder="方案详细介绍..."></textarea></div>
@@ -52,21 +56,31 @@ import { api } from '@/stores/auth'
 const plans = ref([])
 const editing = ref(null)
 const saving = ref(false)
+const toggling = ref(null)
 const msg = ref(null)
-const form = ref({ name: '', description: '', priceYuan: 0, tier_required: 'free' })
+const form = ref({ name: '', description: '', priceYuan: 0, tier_required: 'free', is_active: 1 })
 
 function tierLabel(t) { return { free: '免费', monthly: '月度', yearly: '年度' }[t] || t }
 
 function editPlan(p) {
   editing.value = p.id
-  form.value = { name: p.name, description: p.description, priceYuan: p.price / 100, tier_required: p.tier_required }
+  form.value = { name: p.name, description: p.description, priceYuan: p.price / 100, tier_required: p.tier_required, is_active: p.is_active ? 1 : 0 }
+}
+
+async function toggleActive(p) {
+  toggling.value = p.id
+  try {
+    await api.put(`/admin/plans/${p.id}`, { name: p.name, description: p.description, price: p.price, tier_required: p.tier_required, is_active: p.is_active ? 0 : 1 })
+    await loadPlans()
+  } catch (e) { console.error(e) }
+  finally { toggling.value = null }
 }
 
 async function savePlan() {
   saving.value = true
   msg.value = null
   try {
-    const payload = { ...form.value, price: Math.round(form.value.priceYuan * 100) }
+    const payload = { ...form.value, price: Math.round(form.value.priceYuan * 100), is_active: form.value.is_active ? 1 : 0 }
     if (editing.value) await api.put(`/admin/plans/${editing.value}`, payload)
     else await api.post('/admin/plans', payload)
     msg.value = { text: '保存成功', error: false }
@@ -105,6 +119,8 @@ onMounted(loadPlans)
 .form-group label { font-size: 12px; color: #8B949E; }
 .form-group input, .form-group select, .form-group textarea { padding: 9px 12px; background: #0D1117; border: 1px solid #30363D; border-radius: 8px; color: #E6EDF3; font-size: 14px; outline: none; }
 .form-group textarea { resize: vertical; }
+.switch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #E6EDF3; cursor: pointer; padding: 9px 0; }
+.switch input { width: 16px; height: 16px; accent-color: #58A6FF; }
 .form-actions { display: flex; gap: 12px; margin-top: 12px; }
 .msg { padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 12px; }
 .msg.success { background: rgba(63,185,80,0.1); border: 1px solid #3FB950; color: #3FB950; }

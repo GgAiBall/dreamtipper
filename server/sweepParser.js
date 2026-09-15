@@ -19,6 +19,8 @@ const FIELD_ALIASES = {
   score: ['score', '比分', '比分推荐', '精准比分', 'correctscore'],
   goals: ['goals', '进球', '总进球', '大小球', '进球数', 'totalgoals', 'overunder'],
   half_full: ['halffull', '半全场', '半全', '半场全场', 'htft'],
+  category: ['category', '分类', '类型', '来源', '数据来源'],
+  detail_url: ['detailurl', '详情', '详情页', '详情链接', '链接', 'link', 'url', 'h5', 'h5链接'],
 };
 
 const PLAY_KEYS = ['win_draw_loss', 'handicap', 'score', 'goals', 'half_full'];
@@ -157,6 +159,8 @@ function parseRows(rows) {
       tier_required: normalizeTier(get(row, 'tier_required')),
       weekday: weekday || 0,
       match_no: String(get(row, 'match_no') || '').trim(),
+      category: String(get(row, 'category') || '').trim() || '人工扫盘',
+      detail_url: String(get(row, 'detail_url') || '').trim() || null,
       result,
       status: 'pending',
     });

@@ -99,6 +99,7 @@
             <span class="match-teams">{{ r.home_team }} VS {{ r.away_team }}</span>
             <span class="mono time">{{ formatTime(r.match_time) }}</span>
             <span class="weekday-badge">{{ weekdayLabel(r.weekday) }} {{ r.match_no }}</span>
+            <span v-if="r.category" class="cat-tag" :class="catClass(r.category)">{{ r.category }}</span>
             <span class="tier-tag" :class="r.tier_required">{{ tierTag(r.tier_required) }}</span>
             <span class="stars">
               <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
@@ -155,6 +156,12 @@
               <option value="free">🆓 免费</option><option value="monthly">💎 月度</option><option value="yearly">👑 年度</option>
             </select>
           </div>
+          <div class="form-group"><label>分类</label>
+            <select v-model="editForm.category">
+              <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
+            </select>
+          </div>
+          <div class="form-group"><label>详情页链接(会员专享)</label><input v-model="editForm.detail_url" placeholder="https://... 留空则无" /></div>
         </div>
         <div class="block-title">各玩法结果</div>
         <div class="plays-grid">
@@ -203,6 +210,11 @@ const weekdays = [
   { value: 3, label: '周三' }, { value: 4, label: '周四' },
   { value: 5, label: '周五' }, { value: 6, label: '周六' }, { value: 7, label: '周日' },
 ]
+const categories = [
+  { value: '人工扫盘', label: '人工扫盘（人工录入/上传）' },
+  { value: 'AI扫盘', label: 'AI 扫盘（AI 分析生成）' },
+  { value: '大神扫盘', label: '大神扫盘（专家推荐）' },
+]
 
 function emptyPlays() {
   const obj = {}; playTypes.forEach(p => { obj[p.key] = { pick: '', result: 'pending' } }); return obj
@@ -211,14 +223,15 @@ function emptyPlays() {
 const form = ref({
   league: '', home_team: '', away_team: '', match_time: '',
   confidence_stars: 3, tier_required: 'free', plays: emptyPlays(),
-  weekday: 1, match_no: ''
+  weekday: 1, match_no: '', category: '人工扫盘', detail_url: ''
 })
 
 const editing = ref(null)
 const saving = ref(false)
-const editForm = ref({ league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '' })
+const editForm = ref({ league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '', category: '人工扫盘', detail_url: '' })
 
 function tierTag(t) { return { free: '🆓', monthly: '💎', yearly: '👑' }[t] || t }
+function catClass(c) { return { '人工扫盘': 'cat-manual', 'AI扫盘': 'cat-ai', '大神扫盘': 'cat-god' }[c] || 'cat-other' }
 function statusLabel(s) { return { pending: '📝 草稿', published: '✅ 已发布', settled: '🏁 已结算' }[s] || s }
 function playLabel(k) { return { win_draw_loss: '胜平负', handicap: '让球', score: '比分', goals: '进球', half_full: '半全' }[k] || k }
 function resultDot(r) { return { win: '✅', loss: '❌', push: '🔄', pending: '⏳' }[r] || '-' }
@@ -262,7 +275,8 @@ async function submitDraft() {
       match_time: form.value.match_time, confidence_stars: form.value.confidence_stars,
       tier_required: form.value.tier_required, odds_type: 'multi',
       handicap: JSON.stringify(plays), odds: 0, result: 'pending',
-      weekday: form.value.weekday, match_no: form.value.match_no
+      weekday: form.value.weekday, match_no: form.value.match_no,
+      category: form.value.category, detail_url: form.value.detail_url || null
     }
     const settled = Object.values(plays).filter(p => p.result !== 'pending')
     if (settled.length > 0) {
@@ -297,13 +311,13 @@ function editRecord(r) {
   const plays = parsePlays(r.handicap)
   const filled = emptyPlays()
   Object.keys(plays).forEach(k => { if (filled[k]) filled[k] = plays[k] })
-  editForm.value = { league: r.league, home_team: r.home_team, away_team: r.away_team, match_time: r.match_time ? r.match_time.replace(' ', 'T').substring(0, 16) : '', confidence_stars: r.confidence_stars, tier_required: r.tier_required, plays: filled, weekday: r.weekday || 1, match_no: r.match_no || '' }
+  editForm.value = { league: r.league, home_team: r.home_team, away_team: r.away_team, match_time: r.match_time ? r.match_time.replace(' ', 'T').substring(0, 16) : '', confidence_stars: r.confidence_stars, tier_required: r.tier_required, plays: filled, weekday: r.weekday || 1, match_no: r.match_no || '', category: r.category || '人工扫盘', detail_url: r.detail_url || '' }
 }
 
 async function saveEdit() {
   saving.value = true
   try {
-    const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: editForm.value.match_time, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(editForm.value.plays), result: 'pending', weekday: editForm.value.weekday, match_no: editForm.value.match_no }
+    const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: editForm.value.match_time, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(editForm.value.plays), result: 'pending', weekday: editForm.value.weekday, match_no: editForm.value.match_no, category: editForm.value.category, detail_url: editForm.value.detail_url || null }
     await api.put(`/admin/sweep/${editing.value}`, payload)
     editing.value = null
     await loadRecords()
@@ -434,6 +448,11 @@ onMounted(loadRecords)
 .star { color: #30363D; font-size: 12px; }
 .star.active { color: #F0883E; }
 .tier-tag { font-size: 13px; }
+.cat-tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.cat-manual { background: rgba(88,166,255,0.15); color: #58A6FF; }
+.cat-ai { background: rgba(163,113,247,0.15); color: #A371F7; }
+.cat-god { background: rgba(255,191,46,0.15); color: #FFBF2E; }
+.cat-other { background: rgba(139,148,158,0.15); color: #8B949E; }
 
 .status-badge { font-size: 11px; padding: 3px 10px; border-radius: 10px; font-weight: 500; margin-left: auto; }
 .status-badge.pending { background: rgba(240,136,62,0.15); color: #F0883E; }

@@ -54,13 +54,14 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
       const id = uuidv4();
       const status = doPublish ? 'published' : 'pending';
       const publishedAt = doPublish ? new Date().toISOString() : null;
-      await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, detail_url, category, data_source, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
         [id, `match-${id}`, r.league, r.home_team, r.away_team,
           r.match_time || new Date().toISOString(), r.handicap, r.odds,
           r.odds_type || 'multi', r.confidence_stars,
           r.tier_required, r.result, status, req.user.id,
-          r.weekday || 0, r.match_no || '', publishedAt]);
+          r.weekday || 0, r.match_no || '', publishedAt,
+          r.detail_url || null, r.category || '人工扫盘', 'admin_upload']);
       imported++;
     }
     res.json({
@@ -82,12 +83,12 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
 router.get('/upload/template', adminAuth, (req, res) => {
   try {
     const XLSX = require('xlsx');
-    const header = ['联赛','主队','客队','比赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球推荐','比分推荐','进球推荐','半全场推荐','结果'];
+    const header = ['联赛','主队','客队','比赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球推荐','比分推荐','进球推荐','半全场推荐','结果','分类','详情页链接'];
     const sample = [
       ['英超','曼联','利物浦','2026-09-16 19:30','周三','001','4','免费','主胜','主-0.5 胜','2:1','2球','胜/胜',''],
       ['西甲','皇马','巴萨','2026-09-17 22:00','周四','002','5','月度','平','客+0.5 胜','1:1','3球','平/平',''],
-      ['','','','','','','','','','','','','','',''],
-      ['','','','','','','','','','','','','','','（从下一行开始填写你的数据）'],
+      ['','','','','','','','','','','','','','','','','',''],
+      ['','','','','','','','','','','','','','','','（从下一行开始填写你的数据）','',''],
     ];
     const ws = XLSX.utils.aoa_to_sheet([header, ...sample]);
     const wb = XLSX.utils.book_new();
@@ -103,6 +104,8 @@ router.get('/upload/template', adminAuth, (req, res) => {
       ['权限', '免费 / 月度 / 年度'],
       ['胜平负推荐/让球推荐/比分推荐/进球推荐/半全场推荐', '各玩法推荐内容，可只填需要的列'],
       ['结果', '红/胜、黑/负、走/平（留空=待定）'],
+      ['分类', '人工扫盘 / AI扫盘 / 大神扫盘（默认人工扫盘）'],
+      ['详情页链接', '会员专享详情页 URL，留空则无（后续上传详情页数据时填此列）'],
       ['提示', '上传时勾选“上传后直接发布”即可自动上线'],
     ]);
     XLSX.utils.book_append_sheet(wb, guide, '填写说明');
@@ -118,14 +121,15 @@ router.post('/sweep', adminAuth, async (req, res) => {
   try {
     const data = req.body;
     const id = data.id || uuidv4();
-    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, detail_url, category, data_source, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, data.match_id || id, data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '', parseFloat(data.odds) || 0,
         data.odds_type || '胜平负', parseInt(data.confidence_stars) || 3,
         data.tier_required || 'free', data.result || 'pending',
         'pending', req.user.id,
-        parseInt(data.weekday) || 0, data.match_no || '', null]);
+        parseInt(data.weekday) || 0, data.match_no || '', null,
+        data.detail_url || null, data.category || '人工扫盘', 'admin_upload']);
     if (!ok) return res.status(500).json({ error: '数据库写入失败' });
     res.json({ success: true, id, message: '已保存为草稿' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -139,14 +143,16 @@ router.put('/sweep/:id', adminAuth, async (req, res) => {
       league = ?, home_team = ?, away_team = ?, match_time = ?, handicap = ?,
       odds = ?, odds_type = ?, confidence_stars = ?, tier_required = ?,
       weekday = ?, match_no = ?, published_at = ?,
-      result = ?, updated_at = datetime('now')
+      result = ?, detail_url = ?, category = ?, updated_at = datetime('now')
       WHERE id = ?`,
       [data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '',
         parseFloat(data.odds) || 0, data.odds_type || '胜平负',
         parseInt(data.confidence_stars) || 3, data.tier_required || 'free',
         parseInt(data.weekday) || 0, data.match_no || '', null,
-        data.result || 'pending', req.params.id]);
+        data.result || 'pending',
+        data.detail_url !== undefined ? data.detail_url : null,
+        data.category || '人工扫盘', req.params.id]);
     if (!ok2) return res.status(500).json({ error: '数据库更新失败' });
     res.json({ success: true, message: '已更新，记录变更时间' });
   } catch (err) { res.status(500).json({ error: err.message }); }

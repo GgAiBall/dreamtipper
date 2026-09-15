@@ -31,7 +31,8 @@ router.get('/', async (req, res) => {
     if (date) { sql += ` AND date(created_at) = ?`; params.push(date); totalParams.push(date); }
     if (league) { sql += ` AND league LIKE ?`; params.push(`%${league}%`); totalParams.push(`%${league}%`); }
     if (weekday) { sql += ` AND weekday = ?`; params.push(parseInt(weekday)); totalParams.push(parseInt(weekday)); }
-    sql += ` ORDER BY match_time DESC`;
+    // 按每日编号排序：001 在最上边（match_no 为空排最后），同日按 weekday 升序
+    sql += ` ORDER BY CAST(match_no AS INTEGER) ASC, weekday ASC`;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     sql += ` LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), offset);

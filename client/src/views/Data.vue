@@ -21,16 +21,16 @@
       </button>
     </div>
     <div class="filters filters-advanced" v-show="showFilters">
-      <input v-model="leagueFilter" type="text" placeholder="搜索联赛..." class="filter-input" @input="debouncedLoad" />
+      <input v-model="leagueFilter" type="text" placeholder="搜索联赛..." class="filter-input" @input="onFilterChange" />
       <div class="filter-weekday-tabs">
         <button v-for="d in weekdays" :key="d.value" :class="{ active: weekdayFilter === d.value }"
-          @click="weekdayFilter = weekdayFilter === d.value ? null : d.value; loadData()">{{ d.label }}</button>
+          @click="weekdayFilter = weekdayFilter === d.value ? null : d.value; page = 1; loadData()">{{ d.label }}</button>
       </div>
       <div class="filter-date-wrap">
-        <input v-model="dateFilter" type="date" class="filter-input" @change="loadData" title="按上传日期筛选" />
+        <input v-model="dateFilter" type="date" class="filter-input" @change="page = 1; loadData()" title="按上传日期筛选" />
         <button v-if="dateFilter" @click="dateFilter = ''; loadData()" class="clear-btn" title="清除日期">✕</button>
       </div>
-      <button v-if="dateFilter || leagueFilter || weekdayFilter" @click="clearAllFilters" class="btn btn-ghost btn-sm clear-all">✕ 清除全部</button>
+      <button v-if="dateFilter || leagueFilter || weekdayFilter" @click="page = 1; clearAllFilters()" class="btn btn-ghost btn-sm clear-all">✕ 清除全部</button>
     </div>
     <div class="filters" v-show="selectedIds.size > 0 || (auth.isLoggedIn && auth.tier === 'free')">
       <template v-if="auth.isAdmin">
@@ -67,7 +67,9 @@
         <span class="check-cell" v-if="auth.isAdmin">
           <input type="checkbox" :value="r.id" v-model="selectedIdsArr" />
         </span>
-        <span class="mono match-no-cell">{{ weekdayShort(r.weekday) }}{{ r.match_no }}</span>
+        <span class="mono match-no-cell">{{ weekdayShort(r.weekday) }}{{ r.match_no }}
+          <span v-if="r.category" class="cat-tag" :class="catClass(r.category)">{{ r.category }}</span>
+        </span>
         <span class="league-tag league-cell">{{ r.league }}</span>
         <span class="home-team">{{ r.home_team }}</span>
         <span class="away-team">{{ r.away_team }}</span>
@@ -92,7 +94,10 @@
           <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
         </span>
         <span class="tier-tag tier-cell" :class="r.tier_required">{{ tierTag(r.tier_required) }}</span>
-        <span class="result-tag result-cell" :class="r.result">{{ resultLabel(r.result) }}</span>
+        <span class="result-tag result-cell" :class="r.result">{{ resultLabel(r.result) }}
+          <a v-if="r.detail_url && isMember" :href="r.detail_url" target="_blank" class="detail-link">📋 详情</a>
+          <span v-else-if="r.detail_url" class="detail-locked" title="会员专享">🔒 详情</span>
+        </span>
 
         <!-- 免费用户解锁按钮 -->
         <span v-if="auth.isLoggedIn && auth.tier === 'free'" class="unlock-cell">
@@ -110,9 +115,9 @@
     </div>
 
     <div class="pagination" v-if="total > limit">
-      <button @click="page--" :disabled="page <= 1" class="btn btn-ghost btn-sm">上一页</button>
+      <button @click="page > 1 && (page--, loadData())" :disabled="page <= 1" class="btn btn-ghost btn-sm">上一页</button>
       <span class="mono">{{ page }} / {{ Math.ceil(total / limit) }}</span>
-      <button @click="page++" :disabled="page >= Math.ceil(total / limit)" class="btn btn-ghost btn-sm">下一页</button>
+      <button @click="page < Math.ceil(total / limit) && (page++, loadData())" :disabled="page >= Math.ceil(total / limit)" class="btn btn-ghost btn-sm">下一页</button>
     </div>
 
     <div class="loading" v-if="loading">加载中...</div>
@@ -147,6 +152,8 @@ const weekdayFilter = ref(null)
 const showFilters = ref(false)
 function clearAllFilters() { dateFilter.value = ''; leagueFilter.value = ''; weekdayFilter.value = null; loadData() }
 const weekdays = [{value:1,label:'周一'},{value:2,label:'周二'},{value:3,label:'周三'},{value:4,label:'周四'},{value:5,label:'周五'},{value:6,label:'周六'},{value:7,label:'周日'}]
+// 会员（月/年）可见详情页链接
+const isMember = auth.tier === 'monthly' || auth.tier === 'yearly'
 const page = ref(1)
 const limit = 30
 const total = ref(0)
@@ -214,6 +221,7 @@ function parsePlays(handicapStr) {
 }
 
 function tierTag(t) { return { free: '🆓', monthly: '💎', yearly: '👑' }[t] || t }
+function catClass(c) { return { '人工扫盘': 'cat-manual', 'AI扫盘': 'cat-ai', '大神扫盘': 'cat-god' }[c] || 'cat-other' }
 function resultLabel(r) { return { win: '✅红', loss: '❌黑', push: '🔄走', pending: '⏳待定' }[r] || '-' }
 function resultDot(r) { return { win: '✅', loss: '❌', push: '🔄', pending: '⏳' }[r] || '-' }
 function formatTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }
@@ -239,6 +247,7 @@ async function loadData() {
 
 let timer
 function debouncedLoad() { clearTimeout(timer); timer = setTimeout(loadData, 400) }
+function onFilterChange() { page.value = 1; debouncedLoad() }
 
 watch(selectedIdsArr, syncSelected)
 onMounted(loadData)
@@ -301,7 +310,14 @@ onMounted(loadData)
 .star { color: #30363D; font-size: 11px; }
 .star.active { color: #F0883E; }
 .tier-tag { font-size: 14px; }
+.cat-tag { display: block; font-size: 10px; margin-top: 2px; padding: 1px 4px; border-radius: 3px; text-align: center; font-weight: 600; }
+.cat-manual { background: rgba(88,166,255,0.15); color: #58A6FF; }
+.cat-ai { background: rgba(163,113,247,0.15); color: #A371F7; }
+.cat-god { background: rgba(255,191,46,0.15); color: #FFBF2E; }
+.cat-other { background: rgba(139,148,158,0.15); color: #8B949E; }
 .result-tag { font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-align: center; }
+.detail-link { display: inline-block; margin-top: 4px; font-size: 11px; color: #58A6FF; text-decoration: underline; text-underline-offset: 2px; }
+.detail-locked { display: inline-block; margin-top: 4px; font-size: 11px; color: #8B949E; }
 .result-tag.win { color: #3FB950; }
 .result-tag.loss { color: #F85149; }
 .result-tag.push { color: #8B949E; }

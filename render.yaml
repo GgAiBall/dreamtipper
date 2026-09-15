@@ -24,3 +24,6 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
+      # 跳过示例/种子数据（已用真实人工数据，禁止再塞测试样本）
+      - key: SKIP_SAMPLE_SEED
+        value: 'true'
