@@ -417,9 +417,15 @@ async function applyOfficialResult(rec) {
   if (!official) return { fetched: false };
   const plays = parsePlays(rec.handicap);
   const computed = computeSweepResult(plays, official);
-  await run(`UPDATE sweep_records SET official_result = ?, handicap = ?, result = ?, status = 'settled', updated_at = datetime('now') WHERE id = ?`,
-    [JSON.stringify(official), JSON.stringify(computed.plays), computed.sweepResult, rec.id]);
-  return { fetched: true, sweepResult: computed.sweepResult, official };
+  const haveScore = official.home_score != null && official.away_score != null;
+  if (haveScore) {
+    await run(`UPDATE sweep_records SET official_result = ?, handicap = ?, result = ?, status = 'settled', updated_at = datetime('now') WHERE id = ?`,
+      [JSON.stringify(official), JSON.stringify(computed.plays), computed.sweepResult, rec.id]);
+    return { fetched: true, settled: true, sweepResult: computed.sweepResult, official };
+  }
+  await run(`UPDATE sweep_records SET official_result = ?, updated_at = datetime('now') WHERE id = ?`,
+    [JSON.stringify(official), rec.id]);
+  return { fetched: true, settled: false, sweepResult: 'pending', official, note: official.note || '已匹配竞彩官网赛事，暂无比分可判定' };
 }
 
 router.post('/sweep/:id/fetch-result', adminAuth, async (req, res) => {
@@ -428,19 +434,21 @@ router.post('/sweep/:id/fetch-result', adminAuth, async (req, res) => {
     if (!rec) return res.status(404).json({ error: '未找到该扫盘' });
     const r = await applyOfficialResult(rec);
     if (!r.fetched) return res.status(404).json({ error: '未获取到官网结果（请确认数据源已配置，或比赛尚未结束）' });
-    res.json({ success: true, sweepResult: r.sweepResult, official: r.official });
+    res.json({ success: true, settled: r.settled, sweepResult: r.sweepResult, official: r.official, note: r.note });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/sweep/batch-fetch-result', adminAuth, async (req, res) => {
   try {
     const rows = await queryAll("SELECT * FROM sweep_records WHERE status != 'settled' AND weekday IS NOT NULL AND match_no IS NOT NULL");
-    let ok = 0, skip = 0;
+    let matched = 0, settled = 0, skip = 0;
     for (const rec of rows) {
       const r = await applyOfficialResult(rec);
-      if (r.fetched) ok++; else skip++;
+      if (!r.fetched) { skip++; continue; }
+      matched++;
+      if (r.settled) settled++;
     }
-    res.json({ success: true, fetched: ok, skipped: skip });
+    res.json({ success: true, matched, settled, skipped: skip });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
