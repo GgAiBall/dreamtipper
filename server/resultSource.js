@@ -9,6 +9,14 @@ const https = require('https');
 
 const SPORTTERY_LIST_URL = 'https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry?clientCode=3001';
 const SPORTTERY_LIVE_URL = 'https://webapi.sporttery.cn/gateway/uniform/fb/getMatchLiveV1.qry?matchIds=&eventTc=goals,penalty_shootout&method=live';
+
+// 若配置了 RESULT_PROXY_URL（一个能访问竞彩官网的中转服务，部署在中国可达节点），
+// 则所有竞彩请求都经它转发： proxy?url=<encoded sporttery url>
+function resolveUrl(base) {
+  const proxy = process.env.RESULT_PROXY_URL;
+  if (!proxy) return base;
+  return proxy + (proxy.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(base);
+}
 const WD = { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' };
 
 function weekdayFromNum(n) { const w = Math.floor(n / 1000); return (w >= 1 && w <= 7) ? w : 0; }
@@ -98,7 +106,7 @@ async function fetchFromSporttery(ctx) {
   dates.push('');
   let all = [];
   for (const ds of dates) {
-    const j = await httpGetJson(SPORTTERY_LIST_URL, 15000);
+    const j = await httpGetJson(resolveUrl(SPORTTERY_LIST_URL), 15000);
     const groups = j && j.value && j.value.matchInfoList;
     if (groups && groups.length) {
       for (const g of groups) {
@@ -134,7 +142,7 @@ async function fetchFromSporttery(ctx) {
 async function fetchFromSportteryLive(ctx) {
   const targetNum = (ctx.weekday || 0) * 1000 + parseInt(ctx.matchNo || '0', 10);
   if (!ctx.weekday || !ctx.matchNo) return null;
-  const j = await httpGetJson(SPORTTERY_LIVE_URL, 15000);
+  const j = await httpGetJson(resolveUrl(SPORTTERY_LIVE_URL), 15000);
   const arr = j && j.value;
   if (!Array.isArray(arr) || !arr.length) return null;
   const match = arr.find(m => Number(m.matchNum) === targetNum);

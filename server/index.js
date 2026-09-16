@@ -19,23 +19,6 @@ app.get('/api/health', async (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// [TEMP DEBUG] 诊断竞彩接口从 Render 的可达性
-app.get('/api/_dbg_sporttery', async (req, res) => {
-  const https = require('https');
-  const url = 'https://webapi.sporttery.cn/gateway/uniform/fb/getMatchLiveV1.qry?matchIds=&eventTc=goals,penalty_shootout&method=live';
-  try {
-    const u = new URL(url);
-    const r = https.request({ method: 'GET', hostname: u.hostname, path: u.pathname + u.search, timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json,*/*', 'Referer': 'https://m.sporttery.cn/' } }, resp => {
-      const c = []; resp.on('data', d => c.push(d)); resp.on('end', () => {
-        const buf = Buffer.concat(c);
-        let j = null; try { j = JSON.parse(buf.toString('utf8')); } catch (e) {}
-        res.json({ status: resp.statusCode, len: buf.length, parseOk: !!j, valueType: j && j.value ? (Array.isArray(j.value) ? 'array[' + j.value.length + ']' : typeof j.value) : 'null', firstMatchNum: j && Array.isArray(j.value) && j.value[0] ? j.value[0].matchNum : null, head: buf.toString('utf8').slice(0, 150) });
-      });
-    });
-    r.on('error', e => res.json({ error: e.message })); r.on('timeout', () => { r.destroy(); res.json({ error: 'timeout' }); }); r.end();
-  } catch (e) { res.json({ error: e.message }); }
-});
-
 // 启动
 async function start() {
   await initDb();
