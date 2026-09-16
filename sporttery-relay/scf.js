@@ -36,9 +36,9 @@ exports.main_handler = async (event) => {
     return {
       statusCode: r.status,
       headers: { 'Content-Type': r.ct, 'Access-Control-Allow-Origin': '*' },
-      // 竞彩中文为 GBK，用 base64 透传字节，避免网关/JSON 转码损坏
-      body: r.buf.toString('base64'),
-      isBase64Encoded: true,
+      // 竞彩中文为 GBK，转 UTF-8 后中文会变乱码，但本服务只需 matchNum(数字)/sectionsNo999(数字比分) 等 ASCII 字段，
+      // JSON 仍可被下游正常解析，故直接用 UTF-8 字符串返回，避免依赖 API 网关的 base64 解码配置。
+      body: r.buf.toString('utf8'),
     };
   } catch (e) {
     return { statusCode: 502, headers: { 'Content-Type': 'text/plain' }, body: 'err: ' + e };
