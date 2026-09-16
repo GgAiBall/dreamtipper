@@ -44,7 +44,6 @@ const server = http.createServer((req, res) => {
   }
   const q = url.parse(req.url, true).query;
   const target = q.url;
-  console.log('REQ', new Date().toISOString(), target ? (() => { try { return new URL(target).hostname; } catch (e) { return target.slice(0, 40); } })() : '(none)');
   if (!target) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('missing url param'); }
   pipe(target, res);
 });
