@@ -32,3 +32,8 @@ services:
       # 未配置时「自动获取官网结果」会提示“未配置数据源”。
       - key: OFFICIAL_RESULT_API
         sync: false
+      # 竞彩官网被 Render(新加坡) IP 封禁时的“中国节点中转”。
+      # 中转服务接收 ?url=<编码后的竞彩官网地址> 并服务端转发返回 JSON（见 sporttery-relay/）。
+      # 例：https://你的中转域名   （部署在能访问 webapi.sporttery.cn 的国内节点）
+      - key: RESULT_PROXY_URL
+        sync: false

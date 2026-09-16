@@ -6,6 +6,7 @@
 //     该公开接口不含比分，故 score 为 null，由调用方决定是否等待结果接口。
 
 const https = require('https');
+const http = require('http');
 
 const SPORTTERY_LIST_URL = 'https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry?clientCode=3001';
 const SPORTTERY_LIVE_URL = 'https://webapi.sporttery.cn/gateway/uniform/fb/getMatchLiveV1.qry?matchIds=&eventTc=goals,penalty_shootout&method=live';
@@ -27,10 +28,11 @@ function httpGetJson(url, timeoutMs) {
     let u;
     try { u = new URL(url); } catch (e) { return resolve(null); }
     const opt = {
-      method: 'GET', hostname: u.hostname, path: u.pathname + u.search, timeout: timeoutMs || 15000,
+      method: 'GET', hostname: u.hostname, port: u.port, path: u.pathname + u.search, timeout: timeoutMs || 15000,
       headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json,*/*', 'Referer': 'https://m.sporttery.cn/' },
     };
-    const r = https.request(opt, res => {
+    const lib = u.protocol === 'http:' ? http : https;
+    const r = lib.request(opt, res => {
       const c = []; res.on('data', d => c.push(d));
       res.on('end', () => { let j; try { j = JSON.parse(Buffer.concat(c).toString('utf8')); } catch (e) { j = null; } resolve(j); });
     });
