@@ -14,7 +14,8 @@ const SPORTTERY_LIVE_URL = 'https://webapi.sporttery.cn/gateway/uniform/fb/getMa
 // 若配置了 RESULT_PROXY_URL（一个能访问竞彩官网的中转服务，部署在中国可达节点），
 // 则所有竞彩请求都经它转发： proxy?url=<encoded sporttery url>
 function resolveUrl(base) {
-  const proxy = process.env.RESULT_PROXY_URL;
+  // TEMP DEV RELAY：开发期用本机（中国 IP）的中继，稳定后再部署你自己的中继并在 Render 配置 RESULT_PROXY_URL 覆盖本值。
+  const proxy = process.env.RESULT_PROXY_URL || 'https://lovely-plums-heal.loca.lt';
   if (!proxy) return base;
   return proxy + (proxy.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(base);
 }
