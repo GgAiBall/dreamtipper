@@ -8,6 +8,7 @@
         <router-link to="/admin/plans-upload" class="nav-item">📦 上传方案</router-link>
         <router-link to="/admin/members" class="nav-item">会员管理</router-link>
         <router-link to="/admin/plans" class="nav-item">方案定义</router-link>
+        <router-link to="/admin/analysis" class="nav-item">📡 实时分析</router-link>
         <router-link to="/" class="nav-item">← 返回前台</router-link>
       </div>
     </div>
@@ -53,6 +54,7 @@
         <router-link to="/admin/upload" class="qa-btn">📊 管理扫盘数据</router-link>
         <router-link to="/admin/plans-upload" class="qa-btn">📦 上传推荐方案</router-link>
         <router-link to="/admin/plans" class="qa-btn">📋 管理方案定义</router-link>
+        <router-link to="/admin/analysis" class="qa-btn">📡 管理实时分析</router-link>
       </div>
     </div>
   </div>

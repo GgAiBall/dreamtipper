@@ -7,7 +7,9 @@ const FIELD_ALIASES = {
   league: ['league', '联赛', '联赛名', 'competition', '赛事'],
   home_team: ['hometeam', '主队', '主队名', '主场', 'home'],
   away_team: ['awayteam', '客队', '客队名', '客场', 'away'],
-  match_time: ['matchtime', '比赛时间', '开赛时间', '时间', 'time', 'datetime', 'date', 'kickoff'],
+  match_time: ['matchtime', '比赛时间', 'datetime', 'kickoff'],
+  match_date: ['matchdate', '比赛日期', '日期'],
+  match_time_slot: ['matchtimeslot', '开赛时间', '时间'],
   weekday: ['weekday', '周几', '星期', '星期几', 'day'],
   match_no: ['matchno', '场次', '场次编号', '编号', 'no', 'num'],
   confidence_stars: ['confidencestars', 'confidence', '信心', '信心星级', '星级', 'stars'],
@@ -111,6 +113,21 @@ function deriveWeekday(matchTime) {
   if (isNaN(d.getTime())) return null;
   return d.getDay() === 0 ? 7 : d.getDay();
 }
+function normalizeDate(v) {
+  if (v == null) return null;
+  const s = String(v).trim().replace(/\//g, '-');
+  const m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return null;
+  const p = n => String(n).padStart(2, '0');
+  return `${m[1]}-${p(m[2])}-${p(m[3])}`;
+}
+function normalizeTimeSlot(v) {
+  if (v == null) return null;
+  const s = String(v).trim().replace(/：/g, ':');
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  if (!m) return '00:00';
+  return `${String(m[1]).padStart(2, '0')}:${m[2]}`;
+}
 function clampInt(v, min, max, def) {
   const n = parseInt(v);
   if (isNaN(n)) return def;
@@ -133,7 +150,12 @@ function parseRows(rows) {
       errors.push(`第 ${line} 行：缺少「联赛/主队/客队」，已跳过`);
       return;
     }
-    const matchTime = normalizeTime(get(row, 'match_time'));
+    let matchTime = normalizeTime(get(row, 'match_time'));
+    if (!matchTime) {
+      const md = normalizeDate(get(row, 'match_date'));
+      const ms = normalizeTimeSlot(get(row, 'match_time_slot'));
+      if (md && ms) matchTime = `${md}T${ms}:00`;
+    }
     const plays = {};
     for (const pk of PLAY_KEYS) {
       const v = String(get(row, pk) || '').trim();

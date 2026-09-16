@@ -29,6 +29,7 @@ async function start() {
   app.use('/api/stats', require('./routes/stats'));
   app.use('/api/admin', require('./routes/admin'));
   app.use('/api/purchases', require('./routes/purchases'));
+  app.use('/api/analysis', require('./routes/analysis'));
 
   // 托管前端静态文件（client/dist）
   const clientDist = path.resolve(__dirname, '../client/dist');

@@ -73,10 +73,15 @@ async function initDb() {
   // 用户解锁记录表（免费用户每日 3 次解锁会员场次的记录）
   await db.execute(`CREATE TABLE IF NOT EXISTS user_unlocks (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sweep_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(user_id, sweep_id))`);
 
+  // 实时分析文章（管理员上传，前台实时分析界面展示）
+  await db.execute(`CREATE TABLE IF NOT EXISTS analysis_posts (id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT DEFAULT '实时分析', content TEXT DEFAULT '', image_url TEXT, tier_required TEXT DEFAULT 'free', created_by TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+
   // sweep_records 新增字段（详情页链接 / 分类 / 数据来源）
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN detail_url TEXT`); } catch (e) {}
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN category TEXT DEFAULT '人工扫盘'`); } catch (e) {}
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN data_source TEXT DEFAULT 'system'`); } catch (e) {}
+  // 官网比赛结果（自动获取后写入）
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN official_result TEXT`); } catch (e) {}
   // plans 加 is_active 字段（plan 默认线上）
   try { await db.execute(`ALTER TABLE plans ADD COLUMN is_active INTEGER DEFAULT 1`); } catch (e) {}
 

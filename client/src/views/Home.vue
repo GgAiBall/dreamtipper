@@ -12,6 +12,7 @@
           <router-link to="/data">扫盘数据</router-link>
           <router-link to="/plans">方案市场</router-link>
           <router-link to="/stats">战绩统计</router-link>
+          <router-link to="/analysis">实时分析</router-link>
           <router-link to="/dashboard" v-if="auth.isLoggedIn">会员中心</router-link>
           <router-link to="/admin" v-if="auth.isAdmin" class="admin-link">管理后台</router-link>
         </nav>
@@ -34,6 +35,7 @@
         <p class="hero-sub">20年赛事分析经验，每日扫盘数据实时更新，付费方案战绩全程可追溯</p>
         <div class="hero-actions">
           <router-link to="/data" class="btn btn-primary btn-lg">查看今日扫盘</router-link>
+          <router-link to="/analysis" class="btn btn-ghost btn-lg">实时分析</router-link>
           <router-link to="/stats" class="btn btn-ghost btn-lg">战绩统计</router-link>
         </div>
       </div>

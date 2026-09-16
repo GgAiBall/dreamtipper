@@ -5,6 +5,13 @@ const { v4: uuidv4 } = require('uuid');
 const { queryAll, queryOne, run } = require('../db');
 const adminAuth = require('../middleware/adminAuth');
 const { parseFile } = require('../sweepParser');
+const { fetchOfficialResult, computeSweepResult } = require('../resultSource');
+
+function parsePlays(h) {
+  if (!h) return {};
+  try { const v = JSON.parse(h); if (v && typeof v === 'object' && !Array.isArray(v)) return v; } catch (e) {}
+  return {};
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -83,10 +90,10 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
 router.get('/upload/template', adminAuth, (req, res) => {
   try {
     const XLSX = require('xlsx');
-    const header = ['联赛','主队','客队','比赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球推荐','比分推荐','进球推荐','半全场推荐','结果','分类','详情页链接'];
+    const header = ['联赛','主队','客队','比赛日期','开赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球推荐','比分推荐','进球推荐','半全场推荐','结果','分类','详情页链接'];
     const sample = [
-      ['英超','曼联','利物浦','2026-09-16 19:30','周三','001','4','免费','主胜','主-0.5 胜','2:1','2球','胜/胜',''],
-      ['西甲','皇马','巴萨','2026-09-17 22:00','周四','002','5','月度','平','客+0.5 胜','1:1','3球','平/平',''],
+      ['英超','曼联','利物浦','2026-09-16','19:30','周三','001','4','免费','主胜','主-0.5 胜','2:1','2球','胜/胜',''],
+      ['西甲','皇马','巴萨','2026-09-17','22:00','周四','002','5','月度','平','客+0.5 胜','1:1','3球','平/平',''],
       ['','','','','','','','','','','','','','','','','',''],
       ['','','','','','','','','','','','','','','','（从下一行开始填写你的数据）','',''],
     ];
@@ -97,7 +104,8 @@ router.get('/upload/template', adminAuth, (req, res) => {
       ['字段说明'],
       ['联赛', '如：英超 / 西甲 / 中超'],
       ['主队 / 客队', '对阵双方队名'],
-      ['比赛时间', '格式 2026-09-16 19:30（建议文本，勿用 Excel 日期控件）'],
+      ['比赛日期', '格式 2026-09-16（文本，默认填当天）'],
+      ['开赛时间', '格式 19:30，每 5 分钟一档，自动拼成完整比赛时间'],
       ['周几', '周一~周日 或 1~7，留空将按比赛时间自动推算'],
       ['场次编号', '如 001 / 002，可留空'],
       ['信心星级', '1~5 整数'],
@@ -121,15 +129,15 @@ router.post('/sweep', adminAuth, async (req, res) => {
   try {
     const data = req.body;
     const id = data.id || uuidv4();
-    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, detail_url, category, data_source, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    const ok = await run(`INSERT INTO sweep_records (id, match_id, league, home_team, away_team, match_time, handicap, odds, odds_type, confidence_stars, tier_required, result, status, uploaded_by, weekday, match_no, published_at, detail_url, category, data_source, official_result, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, data.match_id || id, data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '', parseFloat(data.odds) || 0,
         data.odds_type || '胜平负', parseInt(data.confidence_stars) || 3,
         data.tier_required || 'free', data.result || 'pending',
         'pending', req.user.id,
         parseInt(data.weekday) || 0, data.match_no || '', null,
-        data.detail_url || null, data.category || '人工扫盘', 'admin_upload']);
+        data.detail_url || null, data.category || '人工扫盘', 'admin_upload', data.official_result || null]);
     if (!ok) return res.status(500).json({ error: '数据库写入失败' });
     res.json({ success: true, id, message: '已保存为草稿' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -143,7 +151,7 @@ router.put('/sweep/:id', adminAuth, async (req, res) => {
       league = ?, home_team = ?, away_team = ?, match_time = ?, handicap = ?,
       odds = ?, odds_type = ?, confidence_stars = ?, tier_required = ?,
       weekday = ?, match_no = ?, published_at = ?,
-      result = ?, detail_url = ?, category = ?, updated_at = datetime('now')
+      result = ?, detail_url = ?, category = ?, official_result = ?, updated_at = datetime('now')
       WHERE id = ?`,
       [data.league || '', data.home_team || '', data.away_team || '',
         data.match_time || new Date().toISOString(), data.handicap || '',
@@ -152,7 +160,7 @@ router.put('/sweep/:id', adminAuth, async (req, res) => {
         parseInt(data.weekday) || 0, data.match_no || '', null,
         data.result || 'pending',
         data.detail_url !== undefined ? data.detail_url : null,
-        data.category || '人工扫盘', req.params.id]);
+        data.category || '人工扫盘', data.official_result !== undefined ? data.official_result : null, req.params.id]);
     if (!ok2) return res.status(500).json({ error: '数据库更新失败' });
     res.json({ success: true, message: '已更新，记录变更时间' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -395,6 +403,78 @@ router.put('/plans/:id', adminAuth, async (req, res) => {
     const { name, description, price, tier_required, is_active } = req.body;
     await run(`UPDATE plans SET name = ?, description = ?, price = ?, tier_required = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?`,
       [name, description || '', price || 0, tier_required || 'free', is_active ? 1 : 0, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- 自动获取官网比赛结果（依据 周几+场次编号 匹配），并判定红/黑单 ----
+async function applyOfficialResult(rec) {
+  const official = await fetchOfficialResult({
+    weekday: rec.weekday, matchNo: rec.match_no,
+    date: (rec.match_time || '').slice(0, 10),
+    league: rec.league, home: rec.home_team, away: rec.away_team,
+  });
+  if (!official) return { fetched: false };
+  const plays = parsePlays(rec.handicap);
+  const computed = computeSweepResult(plays, official);
+  await run(`UPDATE sweep_records SET official_result = ?, handicap = ?, result = ?, status = 'settled', updated_at = datetime('now') WHERE id = ?`,
+    [JSON.stringify(official), JSON.stringify(computed.plays), computed.sweepResult, rec.id]);
+  return { fetched: true, sweepResult: computed.sweepResult, official };
+}
+
+router.post('/sweep/:id/fetch-result', adminAuth, async (req, res) => {
+  try {
+    const rec = await queryOne('SELECT * FROM sweep_records WHERE id = ?', [req.params.id]);
+    if (!rec) return res.status(404).json({ error: '未找到该扫盘' });
+    const r = await applyOfficialResult(rec);
+    if (!r.fetched) return res.status(404).json({ error: '未获取到官网结果（请确认数据源已配置，或比赛尚未结束）' });
+    res.json({ success: true, sweepResult: r.sweepResult, official: r.official });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/sweep/batch-fetch-result', adminAuth, async (req, res) => {
+  try {
+    const rows = await queryAll("SELECT * FROM sweep_records WHERE status != 'settled' AND weekday IS NOT NULL AND match_no IS NOT NULL");
+    let ok = 0, skip = 0;
+    for (const rec of rows) {
+      const r = await applyOfficialResult(rec);
+      if (r.fetched) ok++; else skip++;
+    }
+    res.json({ success: true, fetched: ok, skipped: skip });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- 实时分析文章管理 ----
+router.get('/analysis', adminAuth, async (req, res) => {
+  try {
+    const rows = await queryAll('SELECT * FROM analysis_posts ORDER BY created_at DESC');
+    res.json({ posts: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/analysis', adminAuth, async (req, res) => {
+  try {
+    const { title, category, content, image_url, tier_required } = req.body;
+    if (!title || !content) return res.status(400).json({ error: '标题与内容为必填' });
+    const id = uuidv4();
+    await run(`INSERT INTO analysis_posts (id, title, category, content, image_url, tier_required, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      [id, title, category || '实时分析', content, image_url || null, tier_required || 'free', req.user.id]);
+    res.json({ success: true, id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/analysis/:id', adminAuth, async (req, res) => {
+  try {
+    const { title, category, content, image_url, tier_required } = req.body;
+    await run(`UPDATE analysis_posts SET title = ?, category = ?, content = ?, image_url = ?, tier_required = ?, updated_at = datetime('now') WHERE id = ?`,
+      [title || '', category || '实时分析', content || '', image_url || null, tier_required || 'free', req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/analysis/:id', adminAuth, async (req, res) => {
+  try {
+    await run('DELETE FROM analysis_posts WHERE id = ?', [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

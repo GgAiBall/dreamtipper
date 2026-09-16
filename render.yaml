@@ -27,3 +27,8 @@ services:
       # 跳过示例/种子数据（已用真实人工数据，禁止再塞测试样本）
       - key: SKIP_SAMPLE_SEED
         value: 'true'
+      # 竞彩官网比赛结果数据源（可选）。支持占位符 {weekday}{matchNo}{date}{league}{home}{away}
+      # 例：https://your-source.com/api/result?wd={weekday}&no={matchNo}&date={date}
+      # 未配置时「自动获取官网结果」会提示“未配置数据源”。
+      - key: OFFICIAL_RESULT_API
+        sync: false

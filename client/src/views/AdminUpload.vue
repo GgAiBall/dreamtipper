@@ -11,6 +11,7 @@
       <button @click="showCreate = !showCreate" class="btn btn-primary">{{ showCreate ? '✕ 收起' : '✏️ 新增扫盘数据' }}</button>
       <button v-if="selectedIds.length" @click="batchPublish" class="btn btn-success">批量发布 ({{ selectedIds.length }})</button>
       <button v-if="selectedIds.length" @click="batchDelete" class="btn btn-ghost danger">批量删除</button>
+      <button @click="batchFetch" class="btn btn-ghost" :disabled="fetching">🔄 批量获取官网结果</button>
       <div class="filter-tabs">
         <button :class="{ active: filter === 'all' }" @click="filter = 'all'; loadRecords()">全部 ({{ counts.all }})</button>
         <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'; loadRecords()">📝 草稿 ({{ counts.pending }})</button>
@@ -51,7 +52,12 @@
         <div class="form-group"><label>联赛</label><input v-model="form.league" required placeholder="如：英超" /></div>
         <div class="form-group"><label>主队</label><input v-model="form.home_team" required /></div>
         <div class="form-group"><label>客队</label><input v-model="form.away_team" required /></div>
-        <div class="form-group"><label>比赛时间</label><input v-model="form.match_time" type="datetime-local" required /></div>
+        <div class="form-group"><label>比赛日期（自动填今天）</label><input v-model="form.match_date" type="date" required /></div>
+        <div class="form-group"><label>开赛时间（每5分钟）</label>
+          <select v-model="form.match_time_slot" required>
+            <option v-for="t in timeSlots" :key="t" :value="t">{{ t }}</option>
+          </select>
+        </div>
         <div class="form-group"><label>场次编号</label>
           <div style="display:flex;gap:8px;align-items:center">
             <select v-model.number="form.weekday" style="width:120px">
@@ -105,6 +111,7 @@
               <span v-for="n in 5" :key="n" class="star" :class="{ active: n <= (r.confidence_stars || 0) }">★</span>
             </span>
             <span class="status-badge" :class="r.status">{{ statusLabel(r.status) }}</span>
+            <span v-if="r.official_result" class="official-badge" :class="r.result">🏟 官网 {{ officialScore(r) }} · {{ resultDot(r.result) }}</span>
           </div>
           <div class="item-plays">
             <div v-for="(p, key) in parsePlays(r.handicap)" :key="key" class="play-line" :class="p.result">
@@ -122,6 +129,7 @@
         <div class="item-actions">
           <button v-if="r.status === 'pending'" @click="publish(r.id)" class="btn btn-success btn-sm">📤 发布</button>
           <button v-else-if="r.status === 'published' || r.status === 'settled'" @click="unpublish(r.id)" class="btn btn-ghost btn-sm">↩️ 撤回</button>
+          <button @click="fetchResult(r.id)" class="btn btn-ghost btn-sm" :disabled="fetching">🔄 获取结果</button>
           <button @click="editRecord(r)" class="btn btn-ghost btn-sm">✏️ 修改</button>
           <button @click="removeRecord(r.id)" class="btn btn-ghost btn-sm danger">删除</button>
         </div>
@@ -137,7 +145,12 @@
           <div class="form-group"><label>联赛</label><input v-model="editForm.league" /></div>
           <div class="form-group"><label>主队</label><input v-model="editForm.home_team" /></div>
           <div class="form-group"><label>客队</label><input v-model="editForm.away_team" /></div>
-          <div class="form-group"><label>比赛时间</label><input v-model="editForm.match_time" type="datetime-local" /></div>
+          <div class="form-group"><label>比赛日期</label><input v-model="editForm.match_date" type="date" /></div>
+          <div class="form-group"><label>开赛时间（每5分钟）</label>
+            <select v-model="editForm.match_time_slot">
+              <option v-for="t in timeSlots" :key="t" :value="t">{{ t }}</option>
+            </select>
+          </div>
           <div class="form-group"><label>场次编号</label>
             <div style="display:flex;gap:8px;align-items:center">
               <select v-model.number="editForm.weekday" style="width:120px">
@@ -221,14 +234,15 @@ function emptyPlays() {
 }
 
 const form = ref({
-  league: '', home_team: '', away_team: '', match_time: '',
+  league: '', home_team: '', away_team: '',
+  match_date: todayStr(), match_time_slot: '00:00',
   confidence_stars: 3, tier_required: 'free', plays: emptyPlays(),
   weekday: 1, match_no: '', category: '人工扫盘', detail_url: ''
 })
 
 const editing = ref(null)
 const saving = ref(false)
-const editForm = ref({ league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '', category: '人工扫盘', detail_url: '' })
+const editForm = ref({ league: '', home_team: '', away_team: '', match_date: todayStr(), match_time_slot: '00:00', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '', category: '人工扫盘', detail_url: '' })
 
 function tierTag(t) { return { free: '🆓', monthly: '💎', yearly: '👑' }[t] || t }
 function catClass(c) { return { '人工扫盘': 'cat-manual', 'AI扫盘': 'cat-ai', '大神扫盘': 'cat-god' }[c] || 'cat-other' }
@@ -245,6 +259,14 @@ function parsePlays(h) {
 function formatTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
 function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleString('zh-CN', { year:'2-digit', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
 function weekdayLabel(w) { return {1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[w]||'' }
+function todayStr() { const d = new Date(); const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}` }
+function genTimeSlots() { const a = []; for (let h=0; h<24; h++) for (let m=0; m<60; m+=5) a.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`); return a }
+const timeSlots = genTimeSlots()
+function officialScore(r) {
+  if (!r.official_result) return ''
+  try { const o = typeof r.official_result === 'string' ? JSON.parse(r.official_result) : r.official_result; if (o && o.home_score != null) return `${o.home_score}-${o.away_score}` } catch (e) {}
+  return ''
+}
 
 async function loadCounts() {
   try {
@@ -272,7 +294,7 @@ async function submitDraft() {
     const plays = form.value.plays
     const payload = {
       league: form.value.league, home_team: form.value.home_team, away_team: form.value.away_team,
-      match_time: form.value.match_time, confidence_stars: form.value.confidence_stars,
+      match_time: `${form.value.match_date}T${form.value.match_time_slot}:00`, confidence_stars: form.value.confidence_stars,
       tier_required: form.value.tier_required, odds_type: 'multi',
       handicap: JSON.stringify(plays), odds: 0, result: 'pending',
       weekday: form.value.weekday, match_no: form.value.match_no,
@@ -288,7 +310,7 @@ async function submitDraft() {
     }
     await api.post('/admin/sweep', payload)
     submitMsg.value = { text: '已保存为草稿，可点击"发布"上线', error: false }
-    form.value = { league: '', home_team: '', away_team: '', match_time: '', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '' }
+    form.value = { league: '', home_team: '', away_team: '', match_date: todayStr(), match_time_slot: '00:00', confidence_stars: 3, tier_required: 'free', plays: emptyPlays(), weekday: 1, match_no: '' }
     await loadRecords()
   } catch (e) { submitMsg.value = { text: e.response?.data?.error || '保存失败', error: true } }
   finally { submitting.value = false }
@@ -311,13 +333,16 @@ function editRecord(r) {
   const plays = parsePlays(r.handicap)
   const filled = emptyPlays()
   Object.keys(plays).forEach(k => { if (filled[k]) filled[k] = plays[k] })
-  editForm.value = { league: r.league, home_team: r.home_team, away_team: r.away_team, match_time: r.match_time ? r.match_time.replace(' ', 'T').substring(0, 16) : '', confidence_stars: r.confidence_stars, tier_required: r.tier_required, plays: filled, weekday: r.weekday || 1, match_no: r.match_no || '', category: r.category || '人工扫盘', detail_url: r.detail_url || '' }
+  const mt = (r.match_time || '').replace(' ', 'T').split('T')
+  const ed = mt[0] ? mt[0].substring(0, 10) : todayStr()
+  const et = mt[1] ? mt[1].substring(0, 5) : '00:00'
+  editForm.value = { league: r.league, home_team: r.home_team, away_team: r.away_team, match_date: ed, match_time_slot: et, confidence_stars: r.confidence_stars, tier_required: r.tier_required, plays: filled, weekday: r.weekday || 1, match_no: r.match_no || '', category: r.category || '人工扫盘', detail_url: r.detail_url || '' }
 }
 
 async function saveEdit() {
   saving.value = true
   try {
-    const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: editForm.value.match_time, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(editForm.value.plays), result: 'pending', weekday: editForm.value.weekday, match_no: editForm.value.match_no, category: editForm.value.category, detail_url: editForm.value.detail_url || null }
+    const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: `${editForm.value.match_date}T${editForm.value.match_time_slot}:00`, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(editForm.value.plays), result: 'pending', weekday: editForm.value.weekday, match_no: editForm.value.match_no, category: editForm.value.category, detail_url: editForm.value.detail_url || null }
     await api.put(`/admin/sweep/${editing.value}`, payload)
     editing.value = null
     await loadRecords()
@@ -345,11 +370,37 @@ async function batchDelete() {
   await loadRecords()
 }
 
+const uploading = ref(false)
+const uploadResult = ref(null)
+
+// 自动获取官网比赛结果（依据 周几+场次 匹配竞彩官网），并判定红/黑单
+const fetching = ref(false)
+async function fetchResult(id) {
+  fetching.value = true
+  try {
+    const { data } = await api.post(`/admin/sweep/${id}/fetch-result`)
+    if (data.success) {
+      const label = data.sweepResult === 'win' ? '红单 ✅' : data.sweepResult === 'loss' ? '黑单 ❌' : data.sweepResult === 'push' ? '走盘 🔄' : '待定'
+      alert(`获取成功：${label}`)
+    }
+    await loadRecords()
+  } catch (e) { alert('获取失败: ' + (e.response?.data?.error || e.message)) }
+  finally { fetching.value = false }
+}
+async function batchFetch() {
+  if (!confirm('确认对所有未结算比赛批量获取官网结果？')) return
+  fetching.value = true
+  try {
+    const { data } = await api.post('/admin/sweep/batch-fetch-result')
+    alert(`批量获取完成：成功 ${data.fetched} 条，跳过 ${data.skipped} 条`)
+    await loadRecords()
+  } catch (e) { alert('批量获取失败: ' + (e.response?.data?.error || e.message)) }
+  finally { fetching.value = false }
+}
+
 const uploadFile = ref(null)
 const uploadInput = ref(null)
 const autoPublish = ref(false)
-const uploading = ref(false)
-const uploadResult = ref(null)
 
 function onFileChange(e) {
   const f = e.target.files && e.target.files[0]
@@ -458,6 +509,9 @@ onMounted(loadRecords)
 .status-badge.pending { background: rgba(240,136,62,0.15); color: #F0883E; }
 .status-badge.published { background: rgba(63,185,80,0.15); color: #3FB950; }
 .status-badge.settled { background: rgba(88,166,255,0.15); color: #58A6FF; }
+.official-badge { font-size: 11px; padding: 3px 10px; border-radius: 10px; font-weight: 500; font-family: 'JetBrains Mono', monospace; margin-left: 8px; background: rgba(63,185,80,0.12); color: #3FB950; }
+.official-badge.loss { background: rgba(248,81,73,0.12); color: #F85149; }
+.official-badge.push { background: rgba(139,148,158,0.12); color: #8B949E; }
 
 .item-plays { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .play-line { display: flex; gap: 6px; align-items: center; font-size: 11px; padding: 3px 8px; border-radius: 4px; background: rgba(33,38,45,0.5); }
