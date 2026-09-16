@@ -417,7 +417,7 @@ async function applyOfficialResult(rec) {
   if (!official) return { fetched: false };
   const plays = parsePlays(rec.handicap);
   const computed = computeSweepResult(plays, official);
-  const haveScore = official.home_score != null && official.away_score != null;
+  const haveScore = official.home_score != null && official.away_score != null && official.finished;
   if (haveScore) {
     await run(`UPDATE sweep_records SET official_result = ?, handicap = ?, result = ?, status = 'settled', updated_at = datetime('now') WHERE id = ?`,
       [JSON.stringify(official), JSON.stringify(computed.plays), computed.sweepResult, rec.id]);

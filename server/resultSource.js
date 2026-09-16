@@ -8,6 +8,7 @@
 const https = require('https');
 
 const SPORTTERY_LIST_URL = 'https://webapi.sporttery.cn/gateway/uniform/football/getMatchListV1.qry?clientCode=3001';
+const SPORTTERY_LIVE_URL = 'https://webapi.sporttery.cn/gateway/uniform/fb/getMatchLiveV1.qry?matchIds=&eventTc=goals,penalty_shootout&method=live';
 const WD = { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' };
 
 function weekdayFromNum(n) { const w = Math.floor(n / 1000); return (w >= 1 && w <= 7) ? w : 0; }
@@ -52,6 +53,7 @@ function normalizeOfficial(raw, ctx) {
     away_score: as != null ? Number(as) : null,
     half_home: halfH != null ? Number(halfH) : null,
     half_away: halfA != null ? Number(halfA) : null,
+    finished: true,
   };
   if (obj.home_score == null && obj.away_score == null) return null;
   return obj;
@@ -124,15 +126,50 @@ async function fetchFromSporttery(ctx) {
     away_score: match.awayScore != null ? Number(match.awayScore) : null,
     half_home: match.homeHalfScore != null ? Number(match.homeHalfScore) : null,
     half_away: match.awayHalfScore != null ? Number(match.awayHalfScore) : null,
+    finished: false,
     note: hasScore ? '' : '已匹配竞彩官网赛事，当前公开接口未返回比分（比赛未结束，或需接入结果接口）',
   };
 }
 
+async function fetchFromSportteryLive(ctx) {
+  const targetNum = (ctx.weekday || 0) * 1000 + parseInt(ctx.matchNo || '0', 10);
+  if (!ctx.weekday || !ctx.matchNo) return null;
+  const j = await httpGetJson(SPORTTERY_LIVE_URL, 15000);
+  const arr = j && j.value;
+  if (!Array.isArray(arr) || !arr.length) return null;
+  const match = arr.find(m => Number(m.matchNum) === targetNum);
+  if (!match) return null;
+  const splitScore = (s) => { const p = String(s || '').split(':'); return p.length === 2 ? [Number(p[0]), Number(p[1])] : [null, null]; };
+  const [hs, as] = splitScore(match.sectionsNo999);
+  const [hh, ha] = splitScore(match.sectionsNo1);
+  const finished = match.matchStatus === '11' || (match.matchStatusName && /完/.test(match.matchStatusName));
+  return {
+    source: 'sporttery-live',
+    matchNum: match.matchNum,
+    matchNumStr: (WD[weekdayFromNum(match.matchNum)] || '') + matchNoFromNum(match.matchNum),
+    matchDate: match.matchDate,
+    status: match.matchStatus,
+    home_team: null,
+    away_team: null,
+    league: null,
+    home_score: (hs != null && !isNaN(hs)) ? hs : null,
+    away_score: (as != null && !isNaN(as)) ? as : null,
+    half_home: (hh != null && !isNaN(hh)) ? hh : null,
+    half_away: (ha != null && !isNaN(ha)) ? ha : null,
+    finished: !!finished,
+    note: (hs != null && as != null) ? '' : '官网暂未出最终比分（比赛进行中或未开赛）',
+  };
+}
+
 async function fetchOfficialResult(ctx) {
-  // 优先自定义结果接口；否则回退竞彩官网赛程匹配
+  // 1) 自定义比分接口（OFFICIAL_RESULT_API）
   if (process.env.OFFICIAL_RESULT_API) {
     try { const r = await fetchFromCustomApi(ctx); if (r) return r; } catch (e) { /* ignore */ }
   }
+  // 2) 竞彩官网直播/赛果接口（按编号匹配，含最终比分）
+  const live = await fetchFromSportteryLive(ctx);
+  if (live) return live;
+  // 3) 回退：竞彩官网在售赛程（仅赛事信息，无比分）
   return fetchFromSporttery(ctx);
 }
 
