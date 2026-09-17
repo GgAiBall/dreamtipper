@@ -14,8 +14,8 @@ const SPORTTERY_LIVE_URL = 'https://webapi.sporttery.cn/gateway/uniform/fb/getMa
 // 若配置了 RESULT_PROXY_URL（一个能访问竞彩官网的中转服务，部署在中国可达节点），
 // 则所有竞彩请求都经它转发： proxy?url=<encoded sporttery url>
 function resolveUrl(base) {
-  // 竞彩官网中继：在 Render 配置 RESULT_PROXY_URL=https://你的中继地址 即可启用（中继需部署在能访问 webapi.sporttery.cn 的节点，如国内服务器/云函数）。
-  const proxy = process.env.RESULT_PROXY_URL || '';
+  // 临时开发期中继（本机，2026-09-18）：正式部署请把中继放到稳定主机并在 Render 配 RESULT_PROXY_URL 覆盖本值。
+  const proxy = process.env.RESULT_PROXY_URL || 'https://vsxwc-14-153-19-208.run.pinggy-free.link';
   if (!proxy) return base;
   return proxy + (proxy.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(base);
 }
