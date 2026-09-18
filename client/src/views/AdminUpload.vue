@@ -26,7 +26,7 @@
         <h3>📊 表格批量上传（支持 Excel / CSV / JSON）</h3>
         <button @click="downloadTemplate" class="btn btn-ghost btn-sm">⬇️ 下载模板</button>
       </div>
-      <p class="sheet-tip">下载模板后在「扫盘数据」工作表填写每日比赛，表头自动识别（联赛/主队/客队/比赛时间/周几/场次/各玩法推荐/结果）。上传后可直接发布或存为草稿。</p>
+      <p class="sheet-tip">下载模板后在「扫盘数据」工作表填写每日比赛，表头自动识别。上传后可直接发布或存为草稿。多选用 / 隔开（如 胜/平）。</p>
       <div class="sheet-row">
         <input ref="uploadInput" type="file" accept=".xlsx,.xls,.csv,.json" @change="onFileChange" class="file-input" />
         <label class="publish-toggle">
@@ -76,49 +76,67 @@
             <option value="free">🆓 免费</option><option value="monthly">💎 月度</option><option value="yearly">👑 年度</option>
           </select>
         </div>
+        <div class="form-group"><label>分类</label>
+          <select v-model="form.category">
+            <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
+          </select>
+        </div>
+        <div class="form-group"><label>详情页链接(会员专享)</label><input v-model="form.detail_url" placeholder="https://... 留空则无" /></div>
       </div>
-      <div class="block-title">各玩法推荐（下拉选择或手动输入）</div>
+
+      <!-- 各玩法：tag 多选 + 手动输入 -->
+      <div class="block-title">各玩法推荐（点击选项可多选，用 / 拼接；也可手动输入）</div>
       <div class="plays-grid">
-        <!-- 胜平负 / 比分 / 进球 / 半全场：单选+可手输 -->
-        <div class="play-item" v-for="play in playTypes.filter(p => p.options)" :key="play.key">
+        <div class="play-item" v-for="play in playTypes" :key="play.key">
           <div class="play-head"><span class="play-name">{{ play.label }}</span><span class="play-tag">{{ play.tag }}</span></div>
-          <div class="play-body">
-            <div class="form-group compact"><label>推荐</label>
-              <input v-model="form.plays[play.key].pick" :list="'opt-'+play.key" placeholder="可选或输入" />
-              <datalist :id="'opt-'+play.key">
-                <option v-for="o in play.options" :key="o" :value="o" />
-              </datalist>
-            </div>
-            <div class="form-group compact"><label>结果</label>
-              <select v-model="form.plays[play.key].result">
-                <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-              </select>
-            </div>
+          <div class="tag-options">
+            <button v-for="o in play.options" :key="o" type="button"
+              class="tag-btn" :class="{ active: isSel(form.plays[play.key].pickArr, o) }"
+              @click="toggleTag(form.plays[play.key], o)">{{ o }}</button>
+          </div>
+          <div class="form-group compact" style="margin-top:6px">
+            <label>当前选择</label>
+            <input v-model="form.plays[play.key].pick" placeholder="手动输入或留空" />
+          </div>
+          <div class="form-group compact">
+            <label>红黑</label>
+            <select v-model="form.plays[play.key].result">
+              <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
           </div>
         </div>
-        <!-- 让球：先选让几球，再选让胜/让平/让负 -->
-        <div class="play-item">
+        <!-- 让球：先选让几球，再选让胜/让平/让负（均可多选） -->
+        <div class="play-item play-handicap">
           <div class="play-head"><span class="play-name">让球</span><span class="play-tag">让球+结果</span></div>
-          <div class="play-body" style="flex-direction:column;gap:6px">
-            <div style="display:flex;gap:8px">
-              <div class="form-group compact" style="flex:1"><label>让几球</label>
-                <input v-model="form.plays.handicap.line" :list="'opt-handicap-line'" placeholder="可选或输入" />
-                <datalist id="opt-handicap-line">
-                  <option v-for="l in HANDICAP_LINES" :key="l" :value="l" />
-                </datalist>
-              </div>
-              <div class="form-group compact" style="flex:1"><label>结果</label>
-                <input v-model="form.plays.handicap.pick" :list="'opt-handicap-result'" placeholder="让胜/让平/让负" />
-                <datalist id="opt-handicap-result">
-                  <option v-for="r in HANDICAP_RESULTS" :key="r" :value="r" />
-                </datalist>
-              </div>
+          <div class="hc-block">
+            <label class="hc-label">让几球</label>
+            <div class="tag-options">
+              <button v-for="l in HANDICAP_LINES" :key="l" type="button"
+                class="tag-btn" :class="{ active: isSel(form.plays.handicap.lineArr, l) }"
+                @click="toggleTag(form.plays.handicap, l, 'lineArr', 'line')">{{ l }}</button>
             </div>
-            <div class="form-group compact"><label>红黑</label>
-              <select v-model="form.plays.handicap.result">
-                <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-              </select>
+          </div>
+          <div class="hc-block">
+            <label class="hc-label">结果</label>
+            <div class="tag-options">
+              <button v-for="r in HANDICAP_RESULTS" :key="r" type="button"
+                class="tag-btn" :class="{ active: isSel(form.plays.handicap.pickArr, r) }"
+                @click="toggleTag(form.plays.handicap, r, 'pickArr', 'pick')">{{ r }}</button>
             </div>
+          </div>
+          <div class="form-group compact" style="margin-top:6px">
+            <label>让几球（显示）</label>
+            <input v-model="form.plays.handicap.line" placeholder="自动拼接或手输" />
+          </div>
+          <div class="form-group compact">
+            <label>结果（显示）</label>
+            <input v-model="form.plays.handicap.pick" placeholder="自动拼接或手输" />
+          </div>
+          <div class="form-group compact">
+            <label>红黑</label>
+            <select v-model="form.plays.handicap.result">
+              <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
           </div>
         </div>
       </div>
@@ -207,48 +225,60 @@
           </div>
           <div class="form-group"><label>详情页链接(会员专享)</label><input v-model="editForm.detail_url" placeholder="https://... 留空则无" /></div>
         </div>
-        <div class="block-title">各玩法推荐（下拉选择或手动输入）</div>
+
+        <!-- 各玩法：tag 多选 + 手动输入 -->
+        <div class="block-title">各玩法推荐（点击选项可多选，用 / 拼接；也可手动输入）</div>
         <div class="plays-grid">
-          <!-- 胜平负 / 比分 / 进球 / 半全场：单选+可手输 -->
-          <div class="play-item" v-for="play in playTypes.filter(p => p.options)" :key="play.key">
+          <div class="play-item" v-for="play in playTypes" :key="play.key">
             <div class="play-head"><span class="play-name">{{ play.label }}</span></div>
-            <div class="play-body">
-              <div class="form-group compact"><label>推荐</label>
-                <input v-model="editForm.plays[play.key].pick" :list="'edopt-'+play.key" placeholder="可选或输入" />
-                <datalist :id="'edopt-'+play.key">
-                  <option v-for="o in play.options" :key="o" :value="o" />
-                </datalist>
-              </div>
-              <div class="form-group compact"><label>结果</label>
-                <select v-model="editForm.plays[play.key].result">
-                  <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-                </select>
-              </div>
+            <div class="tag-options">
+              <button v-for="o in play.options" :key="o" type="button"
+                class="tag-btn" :class="{ active: isSel(editForm.plays[play.key].pickArr, o) }"
+                @click="toggleTag(editForm.plays[play.key], o)">{{ o }}</button>
+            </div>
+            <div class="form-group compact" style="margin-top:6px">
+              <label>当前选择</label>
+              <input v-model="editForm.plays[play.key].pick" placeholder="手动输入或留空" />
+            </div>
+            <div class="form-group compact">
+              <label>红黑</label>
+              <select v-model="editForm.plays[play.key].result">
+                <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+              </select>
             </div>
           </div>
-          <!-- 让球：先选让几球，再选让胜/让平/让负 -->
-          <div class="play-item">
+          <!-- 让球 -->
+          <div class="play-item play-handicap">
             <div class="play-head"><span class="play-name">让球</span></div>
-            <div class="play-body" style="flex-direction:column;gap:6px">
-              <div style="display:flex;gap:8px">
-                <div class="form-group compact" style="flex:1"><label>让几球</label>
-                  <input v-model="editForm.plays.handicap.line" :list="'edopt-handicap-line'" placeholder="可选或输入" />
-                  <datalist id="edopt-handicap-line">
-                    <option v-for="l in HANDICAP_LINES" :key="l" :value="l" />
-                  </datalist>
-                </div>
-                <div class="form-group compact" style="flex:1"><label>结果</label>
-                  <input v-model="editForm.plays.handicap.pick" :list="'edopt-handicap-result'" placeholder="让胜/让平/让负" />
-                  <datalist id="edopt-handicap-result">
-                    <option v-for="r in HANDICAP_RESULTS" :key="r" :value="r" />
-                  </datalist>
-                </div>
+            <div class="hc-block">
+              <label class="hc-label">让几球</label>
+              <div class="tag-options">
+                <button v-for="l in HANDICAP_LINES" :key="l" type="button"
+                  class="tag-btn" :class="{ active: isSel(editForm.plays.handicap.lineArr, l) }"
+                  @click="toggleTag(editForm.plays.handicap, l, 'lineArr', 'line')">{{ l }}</button>
               </div>
-              <div class="form-group compact"><label>红黑</label>
-                <select v-model="editForm.plays.handicap.result">
-                  <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-                </select>
+            </div>
+            <div class="hc-block">
+              <label class="hc-label">结果</label>
+              <div class="tag-options">
+                <button v-for="r in HANDICAP_RESULTS" :key="r" type="button"
+                  class="tag-btn" :class="{ active: isSel(editForm.plays.handicap.pickArr, r) }"
+                  @click="toggleTag(editForm.plays.handicap, r, 'pickArr', 'pick')">{{ r }}</button>
               </div>
+            </div>
+            <div class="form-group compact" style="margin-top:6px">
+              <label>让几球（显示）</label>
+              <input v-model="editForm.plays.handicap.line" placeholder="自动拼接或手输" />
+            </div>
+            <div class="form-group compact">
+              <label>结果（显示）</label>
+              <input v-model="editForm.plays.handicap.pick" placeholder="自动拼接或手输" />
+            </div>
+            <div class="form-group compact">
+              <label>红黑</label>
+              <select v-model="editForm.plays.handicap.result">
+                <option v-for="r in RESULT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+              </select>
             </div>
           </div>
         </div>
@@ -289,7 +319,6 @@ const RESULT_OPTIONS = [
 
 const playTypes = [
   { key: 'win_draw_loss', label: '胜平负', tag: '胜/平/负', options: WDL_OPTIONS },
-  { key: 'handicap', label: '让球', tag: '让球+结果', lines: HANDICAP_LINES, resultOptions: HANDICAP_RESULTS },
   { key: 'score', label: '比分', tag: '精确比分', options: SCORE_OPTIONS },
   { key: 'goals', label: '进球', tag: '总进球', options: GOALS_OPTIONS },
   { key: 'half_full', label: '半全', tag: '半场/全场', options: HALF_FULL_OPTIONS },
@@ -305,10 +334,24 @@ const categories = [
   { value: '大神扫盘', label: '大神扫盘（专家推荐）' },
 ]
 
+// ===== 多选 tag 逻辑 =====
+function isSel(arr, val) { return Array.isArray(arr) && arr.includes(val) }
+function toggleTag(playObj, val, arrKey, fieldKey) {
+  // 默认操作 pickArr/pick
+  const ak = arrKey || 'pickArr'
+  const fk = fieldKey || 'pick'
+  if (!Array.isArray(playObj[ak])) playObj[ak] = []
+  const idx = playObj[ak].indexOf(val)
+  if (idx >= 0) { playObj[ak].splice(idx, 1) }
+  else { playObj[ak].push(val) }
+  // 同步到文本字段（用 / 拼接）
+  playObj[fk] = playObj[ak].join('/')
+}
+
 function emptyPlays() {
   const obj = {}
-  playTypes.forEach(p => { obj[p.key] = { pick: '', result: 'pending' } })
-  obj.handicap = { pick: '', result: 'pending', line: '' }
+  playTypes.forEach(p => { obj[p.key] = { pick: '', result: 'pending', pickArr: [] } })
+  obj.handicap = { pick: '', result: 'pending', line: '', pickArr: [], lineArr: [] }
   return obj
 }
 
@@ -347,6 +390,41 @@ function officialScore(r) {
   return ''
 }
 
+// 把 pickArr 同步到 pick（用户可能手改了 pick 文本，但提交前确保 tag 操作的最新值生效）
+function syncPlaysForSubmit(plays) {
+  const out = JSON.parse(JSON.stringify(plays))
+  // 普通玩法
+  playTypes.forEach(p => {
+    if (out[p.key] && out[p.key].pickArr && out[p.key].pickArr.length) {
+      out[p.key].pick = out[p.key].pickArr.join('/')
+    }
+    delete out[p.key].pickArr
+  })
+  // 让球
+  if (out.handicap) {
+    if (out.handicap.lineArr && out.handicap.lineArr.length) {
+      out.handicap.line = out.handicap.lineArr.join('/')
+    }
+    if (out.handicap.pickArr && out.handicap.pickArr.length) {
+      out.handicap.pick = out.handicap.pickArr.join('/')
+    }
+    // 合并 line + pick -> pick
+    const line = (out.handicap.line || '').trim()
+    const pick = (out.handicap.pick || '').trim()
+    out.handicap.pick = line ? (pick ? `${line} ${pick}` : line) : pick
+    delete out.handicap.lineArr
+    delete out.handicap.pickArr
+    delete out.handicap.line
+  }
+  return out
+}
+
+// 从 pick 文本拆出 pickArr（编辑模式回填）
+function splitToArr(pickText) {
+  if (!pickText) return []
+  return String(pickText).split('/').map(s => s.trim()).filter(Boolean)
+}
+
 async function loadCounts() {
   try {
     for (const s of ['all', 'pending', 'published', 'settled']) {
@@ -370,14 +448,7 @@ async function loadRecords() {
 async function submitDraft() {
   submitting.value = true; submitMsg.value = null
   try {
-    const plays = JSON.parse(JSON.stringify(form.value.plays))
-    // 让球：合并 line + pick -> pick 字段
-    if (plays.handicap) {
-      const line = (plays.handicap.line || '').trim()
-      const pick = (plays.handicap.pick || '').trim()
-      plays.handicap.pick = line ? (pick ? `${line} ${pick}` : line) : pick
-      delete plays.handicap.line
-    }
+    const plays = syncPlaysForSubmit(form.value.plays)
     const payload = {
       league: form.value.league, home_team: form.value.home_team, away_team: form.value.away_team,
       match_time: `${form.value.match_date}T${form.value.match_time_slot}:00`, confidence_stars: form.value.confidence_stars,
@@ -421,17 +492,23 @@ function editRecord(r) {
   Object.keys(plays).forEach(k => {
     if (filled[k]) {
       filled[k] = { ...plays[k], result: plays[k].result || 'pending' }
+      // 回填 pickArr
+      filled[k].pickArr = splitToArr(plays[k].pick)
     }
   })
-  // 让球：从 pick 中拆出 line（+1/+2... 开头）
+  // 让球：从 pick 中拆出 line（+1/+2... 开头）和 result
   if (filled.handicap) {
     const rawPick = (filled.handicap.pick || '').trim()
-    const m = rawPick.match(/^([+-]?\d+)\s*(.*)$/)
+    const m = rawPick.match(/^([+\d\/\-]+)\s*(.*)$/)
     if (m) {
       filled.handicap.line = m[1]
       filled.handicap.pick = m[2] || ''
+      filled.handicap.lineArr = splitToArr(m[1])
+      filled.handicap.pickArr = splitToArr(m[2])
     } else {
       filled.handicap.line = ''
+      filled.handicap.lineArr = []
+      filled.handicap.pickArr = splitToArr(rawPick)
     }
   }
   const mt = (r.match_time || '').replace(' ', 'T').split('T')
@@ -443,14 +520,7 @@ function editRecord(r) {
 async function saveEdit() {
   saving.value = true
   try {
-    const plays = JSON.parse(JSON.stringify(editForm.value.plays))
-    // 让球：合并 line + pick
-    if (plays.handicap) {
-      const line = (plays.handicap.line || '').trim()
-      const pick = (plays.handicap.pick || '').trim()
-      plays.handicap.pick = line ? (pick ? `${line} ${pick}` : line) : pick
-      delete plays.handicap.line
-    }
+    const plays = syncPlaysForSubmit(editForm.value.plays)
     const payload = { league: editForm.value.league, home_team: editForm.value.home_team, away_team: editForm.value.away_team, match_time: `${editForm.value.match_date}T${editForm.value.match_time_slot}:00`, confidence_stars: editForm.value.confidence_stars, tier_required: editForm.value.tier_required, handicap: JSON.stringify(plays), result: 'pending', weekday: editForm.value.weekday, match_no: editForm.value.match_no, category: editForm.value.category, detail_url: editForm.value.detail_url || null }
     await api.put(`/admin/sweep/${editing.value}`, payload)
     editing.value = null
@@ -482,7 +552,6 @@ async function batchDelete() {
 const uploading = ref(false)
 const uploadResult = ref(null)
 
-// 自动获取官网比赛结果（依据 周几+场次 匹配竞彩官网），并判定红/黑单
 const fetching = ref(false)
 async function fetchResult(id) {
   fetching.value = true
@@ -535,11 +604,7 @@ async function handleUpload() {
     fd.append('file', uploadFile.value)
     fd.append('publish', autoPublish.value ? '1' : '0')
     const { data } = await api.post('/admin/upload/sweep', fd)
-    uploadResult.value = {
-      error: false,
-      text: `✅ ${data.message}`,
-      errors: data.errors || [],
-    }
+    uploadResult.value = { error: false, text: `✅ ${data.message}`, errors: data.errors || [] }
     uploadFile.value = null
     if (uploadInput.value) uploadInput.value.value = ''
     await loadRecords()
@@ -583,13 +648,20 @@ onMounted(loadRecords)
 
 .block-title { font-size: 13px; font-weight: 700; color: #E6EDF3; margin: 16px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #21262D; }
 
-.plays-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.plays-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .play-item { background: #0D1117; border: 1px solid #21262D; border-radius: 8px; padding: 10px 12px; }
+.play-handicap { grid-column: span 2; }
 .play-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
 .play-name { font-size: 13px; font-weight: 700; color: #E6EDF3; }
 .play-tag { font-size: 10px; color: #8B949E; }
-.play-body { display: flex; gap: 8px; }
-.play-body .form-group { flex: 1; margin-bottom: 0; }
+
+.tag-options { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #30363D; background: transparent; color: #8B949E; cursor: pointer; font-size: 12px; transition: all 0.12s; user-select: none; }
+.tag-btn:hover { border-color: #58A6FF; color: #C9D1D9; }
+.tag-btn.active { background: #58A6FF; color: #0D1117; border-color: #58A6FF; font-weight: 600; }
+
+.hc-block { margin-bottom: 6px; }
+.hc-label { font-size: 11px; color: #8B949E; display: block; margin-bottom: 4px; }
 
 .result-msg { padding: 12px; border-radius: 8px; font-size: 13px; margin: 12px 0; }
 .result-msg.success { background: rgba(63,185,80,0.1); border: 1px solid #3FB950; color: #3FB950; }
@@ -655,4 +727,8 @@ onMounted(loadRecords)
 .modal-actions { display: flex; gap: 12px; margin-top: 16px; }
 
 .mono { font-family: 'JetBrains Mono', monospace; }
+
+@media (max-width: 768px) {
+  .play-handicap { grid-column: span 1; }
+}
 </style>
