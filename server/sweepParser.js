@@ -18,6 +18,8 @@ const FIELD_ALIASES = {
   odds: ['odds', '赔率'],
   win_draw_loss: ['windrawloss', '胜平负', '胜平负推荐', '主胜平负', 'wdl'],
   handicap: ['handicap', '让球', '让球盘', '让分', '让球推荐', '亚洲盘'],
+  handicap_line: ['handicapline', '让球盘口', '让几球', '盘口'],
+  handicap_result: ['handicapresult', '让球结果', '让胜让平让负', '让球赛果'],
   score: ['score', '比分', '比分推荐', '精准比分', 'correctscore'],
   goals: ['goals', '进球', '总进球', '大小球', '进球数', 'totalgoals', 'overunder'],
   half_full: ['halffull', '半全场', '半全', '半场全场', 'htft'],
@@ -158,8 +160,15 @@ function parseRows(rows) {
     }
     const plays = {};
     for (const pk of PLAY_KEYS) {
-      const v = String(get(row, pk) || '').trim();
+      let v = String(get(row, pk) || '').trim();
       if (v) plays[pk] = { pick: v, result: 'pending' };
+    }
+    // 让球：合并 handicap_line + handicap_result -> handicap.pick
+    const hcLine = String(get(row, 'handicap_line') || '').trim();
+    const hcResult = String(get(row, 'handicap_result') || '').trim();
+    if (hcLine || hcResult) {
+      const merged = [hcLine, hcResult].filter(Boolean).join(' ');
+      plays.handicap = { pick: merged, result: 'pending' };
     }
     if (Object.keys(plays).length === 0) plays.win_draw_loss = { pick: '', result: 'pending' };
     const result = normalizeResult(get(row, 'result'));
