@@ -343,7 +343,7 @@ router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
     const type = req.query.type || 'all';
     // 优先读 DB 缓存（1 小时内有效；生产节点被 geo-block 时仍可命中缓存）
     const cached = await queryOne(`SELECT * FROM sporttery_detail_cache WHERE sporttery_match_id = ?`, [matchId]);
-    const fresh = cached && cached.fetched_at && (Date.now() - new Date(cached.fetched_at).getTime() < 3600 * 1000);
+    const fresh = cached && cached.fetched_at && (Date.now() - new Date(cached.fetched_at).getTime() < 24 * 3600 * 1000);
     let result = {};
     let fromCache = false;
     if (fresh) {
