@@ -79,12 +79,23 @@ async function initDb() {
   // 实时分析文章（管理员上传，前台实时分析界面展示）
   await db.execute(`CREATE TABLE IF NOT EXISTS analysis_posts (id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT DEFAULT '实时分析', content TEXT DEFAULT '', image_url TEXT, tier_required TEXT DEFAULT 'free', created_by TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
 
+  // 竞彩详情缓存（减少重复请求，TTL 1 小时）
+  await db.execute(`CREATE TABLE IF NOT EXISTS sporttery_detail_cache (sweep_id TEXT PRIMARY KEY, sporttery_match_id INTEGER, wbsj_match_id INTEGER, feature TEXT, history TEXT, tables TEXT, future TEXT, injury TEXT, fetched_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+
   // sweep_records 新增字段（详情页链接 / 分类 / 数据来源）
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN detail_url TEXT`); } catch (e) {}
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN category TEXT DEFAULT '人工扫盘'`); } catch (e) {}
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN data_source TEXT DEFAULT 'system'`); } catch (e) {}
   // 官网比赛结果（自动获取后写入）
   try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN official_result TEXT`); } catch (e) {}
+  // 竞彩官网关联 ID（sync 时从 getMatchListV1 提取）
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN sporttery_match_id INTEGER`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN wbsj_match_id INTEGER`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN home_team_id INTEGER`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN away_team_id INTEGER`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN league_id TEXT`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN tournament_id INTEGER`); } catch (e) {}
+  try { await db.execute(`ALTER TABLE sweep_records ADD COLUMN season_id INTEGER`); } catch (e) {}
   // plans 加 is_active 字段（plan 默认线上）
   try { await db.execute(`ALTER TABLE plans ADD COLUMN is_active INTEGER DEFAULT 1`); } catch (e) {}
 

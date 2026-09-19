@@ -314,6 +314,63 @@ router.get('/sweep/:id/context', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// 竞彩官网详情（特征分析/历史交锋/积分榜/未来赛事/伤停）
+// type=feature|h2h|tables|future|injury|all
+router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
+  try {
+    const row = await queryOne(
+      `SELECT id, sporttery_match_id, wbsj_match_id, home_team, away_team, league, match_time FROM sweep_records WHERE id = ?`,
+      [req.params.id]
+    );
+    if (!row) return res.status(404).json({ error: '记录不存在' });
+
+    const sporttery = require('../sportteryDetail');
+    const ids = {
+      sportteryMatchId: row.sporttery_match_id,
+      wbsjMatchId: row.wbsj_match_id
+    };
+
+    if (!ids.sportteryMatchId && !ids.wbsjMatchId) {
+      return res.json({
+        ok: false,
+        error: '该记录未关联竞彩官网 ID。请在 AdminUpload 表单填写“竞彩 mid”（从 https://www.sporttery.cn/jc/zqdz/ 详情页 URL 复制）。',
+        detailUrl: null,
+        record: { home_team: row.home_team, away_team: row.away_team, league: row.league, match_time: row.match_time }
+      });
+    }
+
+    const type = req.query.type || 'all';
+    let result = {};
+    if (type === 'feature' || type === 'all') result.feature = await sporttery.getMatchFeature(ids, 10);
+    if (type === 'h2h' || type === 'all') result.history = await sporttery.getResultHistory(ids, 10);
+    if (type === 'tables' || type === 'all') result.tables = await sporttery.getMatchTables(ids);
+    if (type === 'future' || type === 'all') result.future = await sporttery.getFutureMatches(ids, 4);
+    if (type === 'injury' || type === 'all') result.injury = await sporttery.getInjurySuspension(ids);
+
+    res.json({
+      ok: true,
+      record: { home_team: row.home_team, away_team: row.away_team, league: row.league, match_time: row.match_time },
+      sportteryMatchId: row.sporttery_match_id,
+      wbsjMatchId: row.wbsj_match_id,
+      detailUrl: sporttery.detailUrl(row.sporttery_match_id, row.wbsj_match_id),
+      ...result
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 保存手动填入的竞彩 mid（后台备用机制）
+router.put('/sweep/:id/sporttery-id', adminAuth, async (req, res) => {
+  try {
+    const { sportteryMatchId } = req.body || {};
+    const ok = await run(
+      `UPDATE sweep_records SET sporttery_match_id = ?, updated_at = datetime('now') WHERE id = ?`,
+      [sportteryMatchId ? parseInt(sportteryMatchId, 10) : null, req.params.id]
+    );
+    if (!ok) return res.status(500).json({ error: '数据库写入失败' });
+    res.json({ success: true, sporttery_match_id: sportteryMatchId || null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ========== 方案上传（用户付费解锁的方案）==========
 router.post('/upload/plan', adminAuth, upload.single('file'), async (req, res) => {
   try {

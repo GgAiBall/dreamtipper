@@ -315,6 +315,13 @@ async function runSync(opts) {
       handicap, null, null, null, 'free', result, status,
       uploaded_by, weekday, matchNo, null, new Date().toISOString(),
       category, null, data_source,
+      null,                              // sporttery_match_id
+      m.matchId || null,                // wbsj_match_id
+      m.homeTeamId || null,             // home_team_id
+      m.awayTeamId || null,             // away_team_id
+      m.leagueId || null,               // league_id
+      m.tournamentId || null,           // tournament_id
+      m.seasonId || null,               // season_id
     ];
 
     if (dryRun) {
@@ -326,8 +333,8 @@ async function runSync(opts) {
     if (db.type === 'turso') {
       try {
         await db.client.execute({
-          sql: `INSERT INTO sweep_records (id,match_id,league,home_team,away_team,match_time,handicap,odds,odds_type,confidence_stars,tier_required,result,status,uploaded_by,weekday,match_no,published_at,updated_at,category,detail_url,data_source)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          sql: `INSERT INTO sweep_records (id,match_id,league,home_team,away_team,match_time,handicap,odds,odds_type,confidence_stars,tier_required,result,status,uploaded_by,weekday,match_no,published_at,updated_at,category,detail_url,data_source,sporttery_match_id,wbsj_match_id,home_team_id,away_team_id,league_id,tournament_id,season_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: vals,
         });
         imported++;
@@ -336,7 +343,7 @@ async function runSync(opts) {
         skipped++;
       }
     } else {
-      const cols = 'id,match_id,league,home_team,away_team,match_time,handicap,odds,odds_type,confidence_stars,tier_required,result,status,uploaded_by,weekday,match_no,published_at,updated_at,category,detail_url,data_source';
+      const cols = 'id,match_id,league,home_team,away_team,match_time,handicap,odds,odds_type,confidence_stars,tier_required,result,status,uploaded_by,weekday,match_no,published_at,updated_at,category,detail_url,data_source,sporttery_match_id,wbsj_match_id,home_team_id,away_team_id,league_id,tournament_id,season_id';
       const qs = Array(vals.length).fill('?').join(',');
       try {
         db.run(`INSERT INTO sweep_records (${cols}) VALUES (${qs})`, vals);

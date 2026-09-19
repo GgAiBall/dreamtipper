@@ -182,6 +182,7 @@
           <button @click="fetchResult(r.id)" class="btn btn-ghost btn-sm" :disabled="fetching">🔄 获取结果</button>
           <button @click="showHistory(r)" class="btn btn-ghost btn-sm">📈 赔率变化</button>
           <button @click="showContext(r)" class="btn btn-ghost btn-sm">📊 基本信息</button>
+          <button @click="openSporttery(r)" class="btn btn-ghost btn-sm" v-if="r.sporttery_match_id || r.wbsj_match_id">🔗 竞彩详情</button>
           <button @click="editRecord(r)" class="btn btn-ghost btn-sm">✏️ 修改</button>
           <button @click="removeRecord(r.id)" class="btn btn-ghost btn-sm danger">删除</button>
         </div>
@@ -224,9 +225,17 @@
         </div>
         <div class="modal-body">
           <div class="muted mb-8">{{ contextModal.record?.league }} | {{ contextModal.record?.home_team }} VS {{ contextModal.record?.away_team }} | {{ formatTime(contextModal.record?.match_time) }}</div>
-          <!-- 竞彩官方赔率（来自同步数据） -->
-          <div class="ctx-row">
-            <span class="ctx-key">竞彩官方赔率</span>
+          <!-- Tab 切换 -->
+          <div class="ctx-tabs">
+            <button :class="['ctx-tab', contextModal.tab==='odds'?'active':'']" @click="contextModal.tab='odds'">赔率</button>
+            <button :class="['ctx-tab', contextModal.tab==='feature'?'active':'']" @click="contextModal.tab='feature'" :disabled="!contextModal.sporttery?.ok">特征分析</button>
+            <button :class="['ctx-tab', contextModal.tab==='h2h'?'active':'']" @click="contextModal.tab='h2h'" :disabled="!contextModal.sporttery?.ok">历史交锋</button>
+            <button :class="['ctx-tab', contextModal.tab==='tables'?'active':'']" @click="contextModal.tab='tables'" :disabled="!contextModal.sporttery?.ok">积分榜</button>
+            <button :class="['ctx-tab', contextModal.tab==='future'?'active':'']" @click="contextModal.tab='future'" :disabled="!contextModal.sporttery?.ok">未来赛事</button>
+            <button :class="['ctx-tab', contextModal.tab==='ai'?'active':'']" @click="contextModal.tab='ai'">AI 提示词</button>
+          </div>
+          <!-- Tab: 赔率（同步来的官方赔率） -->
+          <div v-show="contextModal.tab==='odds'">
             <div class="odds-grid">
               <div v-for="(p, key) in parsePlays(contextModal.record?.handicap)" :key="key" v-show="p.pick" class="odds-cell">
                 <div class="odds-cell-label">{{ playLabel(key) }}<span v-if="p.line" class="odds-cell-line">{{ p.line }}</span></div>
@@ -235,30 +244,104 @@
               </div>
             </div>
           </div>
-          <div v-if="contextModal.loading" class="muted">查询 API-Football 中（今日免费额度 100 次）...</div>
-          <div v-else-if="!contextModal.data || contextModal.data.error" class="muted">
-            {{ contextModal.data?.error || '暂无数据。点击“AI 提示词”获取完整提示词模板。' }}
+          <!-- Tab: 特征分析（竞彩官方 6 维） -->
+          <div v-show="contextModal.tab==='feature'">
+            <div v-if="contextModal.sporttery?.error" class="muted">{{ contextModal.sporttery.error }}</div>
+            <div v-else-if="!contextModal.sporttery?.feature?.data" class="muted">竞彩暂无特征分析数据</div>
+            <div v-else>
+              <div v-for="(item, key) in featureList(contextModal.sporttery.feature.data)" :key="key" class="feature-row">
+                <div class="feature-row-title">{{ item.title }}</div>
+                <div class="feature-row-bars">
+                  <div class="feature-bar"><span class="bar-home" :style="{width: item.homePct + '%'}"></span><span class="bar-text">{{ item.homeText }}</span></div>
+                  <div class="feature-bar"><span class="bar-away" :style="{width: item.awayPct + '%'}"></span><span class="bar-text">{{ item.awayText }}</span></div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div v-else class="ctx-block">
-            <div class="ctx-row">
-              <span class="ctx-key">积分榜</span>
-              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.standings || '暂无', null, 2) }}</pre>
+          <!-- Tab: 历史交锋 -->
+          <div v-show="contextModal.tab==='h2h'">
+            <div v-if="!contextModal.sporttery?.history?.data" class="muted">暂无历史交锋</div>
+            <div v-else>
+              <div class="muted mb-8" v-if="contextModal.sporttery.history.data.statistics">
+                近{{ contextModal.sporttery.history.data.statistics.totalLegCnt || '?' }}场 胜 {{ contextModal.sporttery.history.data.statistics.winGoalMatchCnt }} 平 {{ contextModal.sporttery.history.data.statistics.drawMatchCnt }} 负 {{ contextModal.sporttery.history.data.statistics.lossGoalMatchCnt }}
+              </div>
+              <table class="h2h-table" v-if="contextModal.sporttery.history.data.matchList?.length">
+                <thead><tr><th>日期</th><th>赛事</th><th>主队</th><th>比分</th><th>客队</th><th>总进球</th></tr></thead>
+                <tbody>
+                  <tr v-for="(m, i) in contextModal.sporttery.history.data.matchList.slice(0,20)" :key="i">
+                    <td>{{ m.matchDate || '-' }}</td>
+                    <td>{{ m.leagueAbbName || m.leagueName || '-' }}</td>
+                    <td>{{ m.homeTeamShortName }}</td>
+                    <td><b>{{ m.fullCourtGoal || '-' }}</b></td>
+                    <td>{{ m.awayTeamShortName }}</td>
+                    <td>{{ m.totalTeamFullCourtGoalCnt }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div class="ctx-row">
-              <span class="ctx-key">近况</span>
-              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.form || '暂无', null, 2) }}</pre>
+          </div>
+          <!-- Tab: 积分榜 -->
+          <div v-show="contextModal.tab==='tables'">
+            <div v-if="!contextModal.sporttery?.tables?.data" class="muted">暂无积分榜</div>
+            <div v-else>
+              <div v-for="(side, sideKey) in {homeTables:'主队',awayTables:'客队'}" :key="sideKey">
+                <h4 class="mb-8">{{ side }}</h4>
+                <table class="tables-table">
+                  <thead><tr><th></th><th>场次</th><th>胜/平/负</th><th>胜率</th><th>进球</th><th>失球</th><th>净胜</th><th>积分</th><th>排名</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(row, k) in ['total','home','away']" :key="k">
+                      <td>{{ {total:'总',home:'主',away:'客'}[k] }}</td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.totalLegCnt || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.winGoalMatchCnt }}/{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.drawMatchCnt }}/{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.lossGoalMatchCnt }}</td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.winProbability || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.goalCnt || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.lossGoalCnt || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.netGoal || '-' }}</td>
+                      <td><b>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.points || '-' }}</b></td>
+                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.ranking || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div class="ctx-row">
-              <span class="ctx-key">场均数据</span>
-              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.stats || '暂无', null, 2) }}</pre>
+          </div>
+          <!-- Tab: 未来赛事 -->
+          <div v-show="contextModal.tab==='future'">
+            <div v-if="!contextModal.sporttery?.future?.data" class="muted">暂无未来赛事</div>
+            <div v-else>
+              <div v-for="(side, sideKey) in {home:'主队未来',away:'客队未来'}" :key="sideKey">
+                <h4 class="mb-8">{{ side }}</h4>
+                <table class="h2h-table" v-if="contextModal.sporttery.future.data[sideKey]?.matchList?.length">
+                  <thead><tr><th>日期</th><th>赛事</th><th>主队</th><th>客队</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(m, i) in contextModal.sporttery.future.data[sideKey].matchList.slice(0,10)" :key="i">
+                      <td>{{ (m.matchDateTime || '').slice(0,10) }}</td>
+                      <td>{{ m.leagueAbbName || '-' }}</td>
+                      <td>{{ m.homeTeamShortName }}</td>
+                      <td>{{ m.awayTeamShortName }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="muted">暂无</div>
+              </div>
             </div>
-            <div class="ctx-row">
-              <span class="ctx-key">历史交锋</span>
-              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.h2h || '暂无', null, 2) }}</pre>
+          </div>
+          <!-- Tab: AI 提示词 -->
+          <div v-show="contextModal.tab==='ai'">
+            <div v-if="contextModal.loading" class="muted">加载中...</div>
+            <div v-else-if="!contextModal.data || contextModal.data.error" class="muted">
+              {{ contextModal.data?.error || 'AI 提示词需 football-data.org 或 API-Football 数据（API-Football 今日配额已耗尽）。点击下面按钮跳转到 AI 分析页手动输入基本信息。' }}
+            </div>
+            <div v-else class="ctx-block">
+              <div class="ctx-row"><span class="ctx-key">积分榜</span><pre class="ctx-val">{{ JSON.stringify(contextModal.data.standings || '暂无', null, 2) }}</pre></div>
+              <div class="ctx-row"><span class="ctx-key">近况</span><pre class="ctx-val">{{ JSON.stringify(contextModal.data.form || '暂无', null, 2) }}</pre></div>
+              <div class="ctx-row"><span class="ctx-key">场均</span><pre class="ctx-val">{{ JSON.stringify(contextModal.data.stats || '暂无', null, 2) }}</pre></div>
+              <div class="ctx-row"><span class="ctx-key">历史交锋</span><pre class="ctx-val">{{ JSON.stringify(contextModal.data.h2h || '暂无', null, 2) }}</pre></div>
             </div>
           </div>
           <div class="modal-foot">
             <a v-if="contextModal.record" :href="`/analysis/match?home=${encodeURIComponent(contextModal.record.home_team)}&away=${encodeURIComponent(contextModal.record.away_team)}&league=${encodeURIComponent(contextModal.record.league)}&date=${encodeURIComponent(contextModal.record.match_time)}`" target="_blank" class="btn btn-primary btn-sm">🤖 跳转到 AI 分析页</a>
+            <button v-if="contextModal.sporttery?.detailUrl" @click="window.open(contextModal.sporttery.detailUrl, '_blank')" class="btn btn-ghost btn-sm">🔗 打开竞彩官网</button>
           </div>
         </div>
       </div>
@@ -748,15 +831,69 @@ function renderOtherPlays(h) {
 
 // 显示基本信息（供 AI 提示词用）
 async function showContext(r) {
-  contextModal.value = { open: true, record: r, data: null, loading: true }
+  contextModal.value = { open: true, record: r, data: null, loading: true, sporttery: null, tab: 'odds' }
   try {
     const { data } = await api.get(`/admin/sweep/${r.id}/context`)
     contextModal.value.data = data.context
   } catch (e) {
     contextModal.value.data = { error: e.response?.data?.error || e.message }
-  } finally {
-    contextModal.value.loading = false
   }
+  // 同时拉竞彩详情
+  try {
+    const { data: sdata } = await api.get(`/admin/sweep/${r.id}/sporttery-context`)
+    contextModal.value.sporttery = sdata
+  } catch (e) { contextModal.value.sporttery = { error: e.message } }
+  contextModal.value.loading = false
+}
+
+function openSporttery(r) {
+  const id = r.sporttery_match_id
+  const url = id
+    ? `https://www.sporttery.cn/jc/zqdz/index.html?showType=2&mid=${id}`
+    : `https://www.sporttery.cn/jc/zqdz/index.html?showType=2&gm=${r.wbsj_match_id}`
+  window.open(url, '_blank')
+}
+
+// 特征分析（6 维 bar chart）
+function featureList(d) {
+  if (!d) return []
+  // d = { last: {home/away}, sameHomeAway: ..., eachHomeAway: ..., eachSameHomeAway: ..., homeFeature, awayFeature }
+  const fmt = (s) => {
+    if (!s) return null
+    const total = parseInt(s.totalLegCnt || s.totalLeg || 0)
+    const wins = parseInt(s.winGoalMatchCnt || 0)
+    const draws = parseInt(s.drawMatchCnt || 0)
+    const losses = parseInt(s.lossGoalMatchCnt || 0)
+    const pct = (n) => total > 0 ? Math.round(n * 100 / total) : 0
+    return { homeText: `${wins}胜${draws}平${losses}负 (${total}场)`, awayText: `${losses}胜${draws}平${wins}负 (${total}场)`, homePct: pct(wins), awayPct: pct(losses) }
+  }
+  const items = [
+    { key: 'last', title: '近10场战绩' },
+    { key: 'sameHomeAway', title: '同主客场近况' },
+    { key: 'eachHomeAway', title: '主客交锋' },
+    { key: 'eachSameHomeAway', title: '同主客交锋' }
+  ]
+  const rows = []
+  for (const it of items) {
+    const f = fmt(d[it.key])
+    if (f) rows.push({ title: it.title, ...f })
+  }
+  // 场均进失球
+  if (d.homeFeature || d.awayFeature) {
+    const hf = d.homeFeature || {}
+    const af = d.awayFeature || {}
+    rows.push({
+      title: '场均进球',
+      homeText: `${hf.avgGoal || '-'}个`, awayText: `${af.avgGoal || '-'}个`,
+      homePct: parseFloat(hf.avgGoal || 0) * 30, awayPct: parseFloat(af.avgGoal || 0) * 30
+    })
+    rows.push({
+      title: '场均失球',
+      homeText: `${hf.avgLossGoal || '-'}个`, awayText: `${af.avgLossGoal || '-'}个`,
+      homePct: parseFloat(hf.avgLossGoal || 0) * 30, awayPct: parseFloat(af.avgLossGoal || 0) * 30
+    })
+  }
+  return rows
 }
 
 async function fetchResult(id) {
@@ -967,7 +1104,29 @@ onMounted(loadRecords)
 
 .mono { font-family: 'JetBrains Mono', monospace; }
 
+/* 基本信息弹窗：Tab + 竞彩特征分析/历史交锋/积分榜 */
+.ctx-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #21262D; padding-bottom: 10px; }
+.ctx-tab { background: #0D1117; border: 1px solid #21262D; color: #8B949E; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.ctx-tab:hover:not(:disabled) { border-color: #58A6FF; color: #C9D1D9; }
+.ctx-tab.active { background: #1F6FEB; border-color: #1F6FEB; color: #fff; }
+.ctx-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.feature-row { margin-bottom: 12px; }
+.feature-row-title { font-size: 13px; color: #C9D1D9; font-weight: 600; margin-bottom: 6px; }
+.feature-row-bars { display: flex; flex-direction: column; gap: 4px; }
+.feature-bar { position: relative; background: #0D1117; border-radius: 4px; height: 20px; overflow: hidden; font-size: 10px; }
+.feature-bar .bar-home { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(63,185,80,0.35); }
+.feature-bar .bar-away { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(248,81,73,0.35); }
+.feature-bar .bar-text { position: absolute; left: 6px; top: 0; line-height: 20px; color: #C9D1D9; z-index: 1; font-family: 'JetBrains Mono', monospace; }
+
+.h2h-table, .tables-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px; }
+.h2h-table th, .tables-table th { background: #161B22; color: #8B949E; padding: 6px 4px; text-align: center; font-weight: 600; }
+.h2h-table td, .tables-table td { padding: 5px 4px; border-top: 1px solid #21262D; text-align: center; color: #C9D1D9; font-family: 'JetBrains Mono', monospace; }
+.h2h-table td:nth-child(2), .h2h-table td:nth-child(3), .h2h-table td:nth-child(5) { text-align: left; }
+
 @media (max-width: 768px) {
   .play-handicap { grid-column: span 1; }
+  .ctx-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .h2h-table, .tables-table { display: block; overflow-x: auto; }
 }
 </style>
