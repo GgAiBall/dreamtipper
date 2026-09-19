@@ -37,7 +37,7 @@ router.get('/dashboard', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 文件批量导入扫盘数据（xlsx/xls/csv/json）-> 自动识别列 + 可选自动发布
+// 文件批量导入扫盘数据(xlsx/xls/csv/json)-> 自动识别列 + 可选自动发布
 router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: '请上传文件' });
@@ -46,11 +46,11 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
     try {
       parsed = parseFile(req.file.buffer, req.file.originalname);
     } catch (e) {
-      return res.status(400).json({ error: '文件解析失败：' + e.message });
+      return res.status(400).json({ error: '文件解析失败:' + e.message });
     }
     const { records, errors } = parsed;
     if (!records || records.length === 0) {
-      return res.status(400).json({ error: '未识别到有效数据行（需包含 联赛/主队/客队 列）', errors });
+      return res.status(400).json({ error: '未识别到有效数据行(需包含 联赛/主队/客队 列)', errors });
     }
     let imported = 0, skippedDup = 0;
     for (const r of records) {
@@ -77,8 +77,8 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
       skippedDup,
       published: doPublish,
       message: doPublish
-        ? `已导入并自动发布 ${imported} 条${skippedDup ? `，跳过重复 ${skippedDup} 条` : ''}`
-        : `已保存 ${imported} 条草稿${skippedDup ? `，跳过重复 ${skippedDup} 条` : ''}，可点击单独发布`,
+        ? `已导入并自动发布 ${imported} 条${skippedDup ? `,跳过重复 ${skippedDup} 条` : ''}`
+        : `已保存 ${imported} 条草稿${skippedDup ? `,跳过重复 ${skippedDup} 条` : ''},可点击单独发布`,
       errors: errors.length ? errors : undefined,
     });
   } catch (err) {
@@ -86,7 +86,7 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
   }
 });
 
-// 将 handicap JSON 字符串解析为各玩法列文本（用 / 隔开）
+// 将 handicap JSON 字符串解析为各玩法列文本(用 / 隔开)
 function splitHandicapToColumns(handicapJson) {
   const cols = { wdl: [], hcLine: [], hcResult: [], score: [], goals: [], halfFull: [] };
   if (!handicapJson) return cols;
@@ -107,12 +107,12 @@ function splitHandicapToColumns(handicapJson) {
   return cols;
 }
 
-// 下载扫盘数据 Excel 模板（自动识别列用），自动包含当天及未来在售比赛
+// 下载扫盘数据 Excel 模板(自动识别列用),自动包含当天及未来在售比赛
 router.get('/upload/template', adminAuth, async (req, res) => {
   try {
     const XLSX = require('xlsx');
     const header = ['联赛','主队','客队','比赛日期','开赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球盘口','让球结果','比分推荐','进球推荐','半全场推荐','结果','分类','详情页链接'];
-    // 拉取今天 00:00 起的所有比赛（含未来销售窗口）
+    // 拉取今天 00:00 起的所有比赛(含未来销售窗口)
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
     const rows = await queryAll(
       `SELECT * FROM sweep_records WHERE match_time >= ? ORDER BY match_time ASC LIMIT 200`,
@@ -145,7 +145,7 @@ router.get('/upload/template', adminAuth, async (req, res) => {
         r.detail_url || '',
       ]);
     }
-    // 若没有比赛数据，给出示例行
+    // 若没有比赛数据,给出示例行
     if (!sample.length) {
       sample.push(['英超','曼联','利物浦','2026-09-16','19:30','周三','001','4','免费','胜','-0.5','让胜','2:1','2','胜胜','', '人工扫盘', '']);
       sample.push(['西甲','皇马','巴萨','2026-09-17','22:00','周四','002','5','月度','平','+1','让平','1:1','3','平平','', '人工扫盘', '']);
@@ -155,24 +155,24 @@ router.get('/upload/template', adminAuth, async (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, '扫盘数据');
     const guide = XLSX.utils.aoa_to_sheet([
       ['字段说明'],
-      ['联赛', '如：英超 / 西甲 / 中超'],
+      ['联赛', '如:英超 / 西甲 / 中超'],
       ['主队 / 客队', '对阵双方队名'],
-      ['比赛日期', '格式 2026-09-16（文本，默认填当天）'],
-      ['开赛时间', '格式 19:30，每 5 分钟一档，自动拼成完整比赛时间'],
-      ['周几', '周一~周日 或 1~7，留空将按比赛时间自动推算'],
-      ['场次编号', '如 001 / 002，可留空'],
+      ['比赛日期', '格式 2026-09-16(文本,默认填当天)'],
+      ['开赛时间', '格式 19:30,每 5 分钟一档,自动拼成完整比赛时间'],
+      ['周几', '周一~周日 或 1~7,留空将按比赛时间自动推算'],
+      ['场次编号', '如 001 / 002,可留空'],
       ['信心星级', '1~5 整数'],
       ['权限', '免费 / 月度 / 年度'],
-      ['胜平负推荐', '可多选，用 / 隔开，如：胜/平'],
-      ['让球盘口', '可多选，用 / 隔开：+1/+2/+3/+4/-1/-2/-3/-4'],
-      ['让球结果', '可多选，用 / 隔开：让胜/让平/让负'],
-      ['比分推荐', '可多选，用 / 隔开：1:0/2:0/2:1/3:0/3:1/3:2/4:0/4:1/4:2/5:0/5:1/5:2/胜其它/0:0/1:1/2:2/3:3/平其他/0:1/0:2/1:2/0:3/1:3/2:3/0:4/1:4/2:4/0:5/1:5/2:5/负其它'],
-      ['进球推荐', '可多选，用 / 隔开：0/1/2/3/4/5/6/7+'],
-      ['半全场推荐', '可多选，用 / 隔开：胜胜/胜平/胜负/平胜/平平/平负/负胜/负平/负负'],
-      ['结果', '红/胜、黑/负、走/平（留空=待定）'],
-      ['分类', '人工扫盘 / AI扫盘 / 大神扫盘（默认人工扫盘）'],
-      ['详情页链接', '会员专享详情页 URL，留空则无（后续上传详情页数据时填此列）'],
-      ['提示', '上传时勾选“上传后直接发布”即可自动上线'],
+      ['胜平负推荐', '可多选,用 / 隔开,如:胜/平'],
+      ['让球盘口', '可多选,用 / 隔开:+1/+2/+3/+4/-1/-2/-3/-4'],
+      ['让球结果', '可多选,用 / 隔开:让胜/让平/让负'],
+      ['比分推荐', '可多选,用 / 隔开:1:0/2:0/2:1/3:0/3:1/3:2/4:0/4:1/4:2/5:0/5:1/5:2/胜其它/0:0/1:1/2:2/3:3/平其他/0:1/0:2/1:2/0:3/1:3/2:3/0:4/1:4/2:4/0:5/1:5/2:5/负其它'],
+      ['进球推荐', '可多选,用 / 隔开:0/1/2/3/4/5/6/7+'],
+      ['半全场推荐', '可多选,用 / 隔开:胜胜/胜平/胜负/平胜/平平/平负/负胜/负平/负负'],
+      ['结果', '红/胜、黑/负、走/平(留空=待定)'],
+      ['分类', '人工扫盘 / AI扫盘 / 大神扫盘(默认人工扫盘)'],
+      ['详情页链接', '会员专享详情页 URL,留空则无(后续上传详情页数据时填此列)'],
+      ['提示', '上传时勾选"上传后直接发布"即可自动上线'],
     ]);
     XLSX.utils.book_append_sheet(wb, guide, '填写说明');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -220,11 +220,11 @@ router.put('/sweep/:id', adminAuth, async (req, res) => {
         data.detail_url !== undefined ? data.detail_url : null,
         data.category || '人工扫盘', data.official_result !== undefined ? data.official_result : null, req.params.id]);
     if (!ok2) return res.status(500).json({ error: '数据库更新失败' });
-    res.json({ success: true, message: '已更新，记录变更时间' });
+    res.json({ success: true, message: '已更新,记录变更时间' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 单条发布：将 status 由 pending -> published
+// 单条发布:将 status 由 pending -> published
 router.post('/sweep/:id/publish', adminAuth, async (req, res) => {
   try {
     await run(`UPDATE sweep_records SET status = 'published', published_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
@@ -233,7 +233,7 @@ router.post('/sweep/:id/publish', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 批量发布（按筛选条件）
+// 批量发布(按筛选条件)
 router.post('/sweep/batch-publish', adminAuth, async (req, res) => {
   try {
     const { ids } = req.body;
@@ -245,7 +245,7 @@ router.post('/sweep/batch-publish', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 取消发布（回到草稿）
+// 取消发布(回到草稿)
 router.post('/sweep/:id/unpublish', adminAuth, async (req, res) => {
   try {
     await run(`UPDATE sweep_records SET status = 'pending', published_at = NULL, updated_at = datetime('now') WHERE id = ?`,
@@ -284,7 +284,7 @@ router.get('/sweep', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 单条扫盘的赔率历史（查看赔率变化）
+// 单条扫盘的赔率历史(查看赔率变化)
 router.get('/sweep/:id/odds-history', adminAuth, async (req, res) => {
   try {
     const rows = await queryAll(
@@ -295,7 +295,7 @@ router.get('/sweep/:id/odds-history', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 单条扫盘的基本信息（供 AI 生成提示词用）
+// 单条扫盘的基本信息(供 AI 生成提示词用)
 router.get('/sweep/:id/context', adminAuth, async (req, res) => {
   try {
     const row = await queryOne(`SELECT * FROM sweep_records WHERE id = ?`, [req.params.id]);
@@ -314,7 +314,7 @@ router.get('/sweep/:id/context', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 竞彩官网详情（特征分析/历史交锋/积分榜/未来赛事/伤停）
+// 竞彩官网详情(特征分析/历史交锋/积分榜/未来赛事/伤停)
 // type=feature|h2h|tables|future|injury|all
 router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
   try {
@@ -330,10 +330,11 @@ router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
       wbsjMatchId: row.wbsj_match_id
     };
 
-    if (!ids.sportteryMatchId && !ids.wbsjMatchId) {
+    const matchId = row.sporttery_match_id || row.wbsj_match_id;
+    if (!matchId) {
       return res.json({
         ok: false,
-        error: '该记录未关联竞彩官网 ID。请在 AdminUpload 表单填写“竞彩 mid”（从 https://www.sporttery.cn/jc/zqdz/ 详情页 URL 复制）。',
+        error: '该记录未关联竞彩官网 ID。请在 AdminUpload 表单填写"竞彩 mid"（从 https://www.sporttery.cn/jc/zqdz/ 详情页 URL 复制）。',
         detailUrl: null,
         record: { home_team: row.home_team, away_team: row.away_team, league: row.league, match_time: row.match_time }
       });
@@ -341,7 +342,7 @@ router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
 
     const type = req.query.type || 'all';
     // 优先读 DB 缓存（1 小时内有效；生产节点被 geo-block 时仍可命中缓存）
-    const cached = await queryOne(`SELECT * FROM sporttery_detail_cache WHERE sweep_id = ?`, [req.params.id]);
+    const cached = await queryOne(`SELECT * FROM sporttery_detail_cache WHERE sporttery_match_id = ?`, [matchId]);
     const fresh = cached && cached.fetched_at && (Date.now() - new Date(cached.fetched_at).getTime() < 3600 * 1000);
     let result = {};
     let fromCache = false;
@@ -360,13 +361,13 @@ router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
       if (type === 'tables' || type === 'all') result.tables = await sporttery.getMatchTables(ids);
       if (type === 'future' || type === 'all') result.future = await sporttery.getFutureMatches(ids, 4);
       if (type === 'injury' || type === 'all') result.injury = await sporttery.getInjurySuspension(ids);
-      // 写缓存（仅当至少有一个端点成功）
+      // 写缓存(仅当至少有一个端点成功)
       const anyOk = Object.values(result).some(r => r && r.ok);
       if (anyOk) {
         const j = k => (result[k] && result[k].ok && result[k].data) ? JSON.stringify(result[k].data) : null;
         try {
-          await run(`INSERT OR REPLACE INTO sporttery_detail_cache (sweep_id, sporttery_match_id, wbsj_match_id, feature, history, tables, future, injury, fetched_at, updated_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`,
-            [req.params.id, row.sporttery_match_id, row.wbsj_match_id, j('feature'), j('history'), j('tables'), j('future'), j('injury')]);
+          await run(`INSERT OR REPLACE INTO sporttery_detail_cache (sporttery_match_id, wbsj_match_id, feature, history, tables, future, injury, fetched_at, updated_at) VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+            [row.sporttery_match_id, row.wbsj_match_id, j('feature'), j('history'), j('tables'), j('future'), j('injury')]);
         } catch (e) { console.error('cache write err', e.message); }
       }
     }
@@ -383,7 +384,7 @@ router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 保存手动填入的竞彩 mid（后台备用机制）
+// 保存手动填入的竞彩 mid(后台备用机制)
 router.put('/sweep/:id/sporttery-id', adminAuth, async (req, res) => {
   try {
     const { sportteryMatchId } = req.body || {};
@@ -396,7 +397,7 @@ router.put('/sweep/:id/sporttery-id', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ========== 方案上传（用户付费解锁的方案）==========
+// ========== 方案上传(用户付费解锁的方案)==========
 router.post('/upload/plan', adminAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: '请上传文件' });
@@ -522,7 +523,7 @@ router.post('/plans', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 会员降级（移除特权）──────────────────────────────────────
+// ── 会员降级(移除特权)──────────────────────────────────────
 router.put('/members/:id/downgrade', adminAuth, async (req, res) => {
   try {
     await run(`UPDATE users SET subscription_tier = 'free', subscription_expire = NULL WHERE id = ? AND role = 'user'`,
@@ -533,7 +534,7 @@ router.put('/members/:id/downgrade', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 会员升级（管理员操作）──────────────────────────────────────
+// ── 会员升级(管理员操作)──────────────────────────────────────
 router.put('/members/:id/upgrade', adminAuth, async (req, res) => {
   try {
     const { tier, days } = req.body;
@@ -552,7 +553,7 @@ router.put('/members/:id/upgrade', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 重置密码（管理员操作）──────────────────────────────────────
+// ── 重置密码(管理员操作)──────────────────────────────────────
 router.put('/members/:id/reset-password', adminAuth, async (req, res) => {
   try {
     const bcrypt = require('bcryptjs');
@@ -577,7 +578,7 @@ router.put('/plans/:id', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ---- 自动获取官网比赛结果（依据 周几+场次编号 匹配），并判定红/黑单 ----
+// ---- 自动获取官网比赛结果(依据 周几+场次编号 匹配),并判定红/黑单 ----
 async function applyOfficialResult(rec) {
   const official = await fetchOfficialResult({
     weekday: rec.weekday, matchNo: rec.match_no,
@@ -595,7 +596,7 @@ async function applyOfficialResult(rec) {
   }
   await run(`UPDATE sweep_records SET official_result = ?, updated_at = datetime('now') WHERE id = ?`,
     [JSON.stringify(official), rec.id]);
-  return { fetched: true, settled: false, sweepResult: 'pending', official, note: official.note || '已匹配竞彩官网赛事，暂无比分可判定' };
+  return { fetched: true, settled: false, sweepResult: 'pending', official, note: official.note || '已匹配竞彩官网赛事,暂无比分可判定' };
 }
 
 router.post('/sweep/:id/fetch-result', adminAuth, async (req, res) => {
@@ -603,7 +604,7 @@ router.post('/sweep/:id/fetch-result', adminAuth, async (req, res) => {
     const rec = await queryOne('SELECT * FROM sweep_records WHERE id = ?', [req.params.id]);
     if (!rec) return res.status(404).json({ error: '未找到该扫盘' });
     const r = await applyOfficialResult(rec);
-    if (!r.fetched) return res.status(404).json({ error: '未获取到官网结果（请确认数据源已配置，或比赛尚未结束）' });
+    if (!r.fetched) return res.status(404).json({ error: '未获取到官网结果(请确认数据源已配置,或比赛尚未结束)' });
     res.json({ success: true, settled: r.settled, sweepResult: r.sweepResult, official: r.official, note: r.note });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
