@@ -133,48 +133,63 @@ async function getExistingMatchNums(db, daysBack = 7, daysForward = 14) {
 }
 
 // 提取玩法的 handicap JSON
+// 把 "1:0=7.50,2:0=8.00" 解析为 { "1:0": 7.5, "2:0": 8 }
+function parseOddsString(str) {
+  const out = {};
+  if (!str || typeof str !== 'string') return out;
+  str.split(',').forEach(part => {
+    const idx = part.indexOf('=');
+    if (idx > 0) {
+      const k = part.slice(0, idx).trim();
+      const v = parseFloat(part.slice(idx + 1));
+      if (k && !isNaN(v)) out[k] = v;
+    }
+  });
+  return out;
+}
+function numOrStr(v) { const n = parseFloat(v); return isNaN(n) ? v : n; }
+
 function extractHandicap(oddsList) {
   const plays = [];
-  if (!oddsList || !oddsList.length) return '[]';
+  if (!Array.isArray(oddsList) || !oddsList.length) return '[]';
+  const byCode = {};
+  for (const o of oddsList) if (o.poolCode) byCode[o.poolCode] = o;
 
-  // HHAD = 让球胜平负
-  const had = oddsList.find(o => o.poolCode === 'HHAD');
-  if (had && had.h != null) {
-    plays.push({ pick: '让胜', handicap: String(had.goalLine), result: 'pending' });
-    plays.push({ pick: '让平', handicap: String(had.goalLine), result: 'pending' });
-    plays.push({ pick: '让负', handicap: String(had.goalLine), result: 'pending' });
+  // HAD = 胜平负（带真实赔率）
+  const had = byCode.HAD;
+  if (had && had.h) {
+    plays.push({ key: 'win_draw_loss', pick: '胜/平/负', odds: { '胜': numOrStr(had.h), '平': numOrStr(had.d), '负': numOrStr(had.a) }, result: 'pending' });
   }
 
-  // HAD = 胜平负
-  const had2 = oddsList.find(o => o.poolCode === 'HAD');
-  if (had2) {
-    if (had2.h != null) plays.push({ pick: '胜', result: 'pending' });
-    if (had2.d != null) plays.push({ pick: '平', result: 'pending' });
-    if (had2.a != null) plays.push({ pick: '负', result: 'pending' });
+  // HHAD = 让球胜平负（带盘口 + 真实赔率）
+  const hhad = byCode.HHAD;
+  if (hhad && hhad.h) {
+    const line = String(hhad.goalLine || '');
+    plays.push({ key: 'handicap', line, pick: '让胜/让平/让负', odds: { '让胜': numOrStr(hhad.h), '让平': numOrStr(hhad.d), '让负': numOrStr(hhad.a) }, result: 'pending' });
   }
 
-  // CRS = 比分
-  const crs = oddsList.find(o => o.poolCode === 'CRS');
-  if (crs) {
-    const scoreOpts = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它'];
-    scoreOpts.forEach(pick => plays.push({ pick, result: 'pending' }));
+  // CRS = 比分（赔率串）
+  const crs = byCode.CRS;
+  if (crs && crs.odds) {
+    const m = parseOddsString(crs.odds);
+    if (Object.keys(m).length) plays.push({ key: 'score', pick: Object.keys(m).join('/'), odds: m, result: 'pending' });
   }
 
-  // TGM = 总进球
-  const tgm = oddsList.find(o => o.poolCode === 'TGM');
-  if (tgm) {
-    const goalOpts = ['0','1','2','3','4','5','6','7+'];
-    goalOpts.forEach(pick => plays.push({ pick, result: 'pending' }));
+  // TGM = 总进球（赔率串）
+  const tgm = byCode.TGM;
+  if (tgm && tgm.odds) {
+    const m = parseOddsString(tgm.odds);
+    if (Object.keys(m).length) plays.push({ key: 'goals', pick: Object.keys(m).join('/'), odds: m, result: 'pending' });
   }
 
-  // HAFU = 半全场
-  const hafu = oddsList.find(o => o.poolCode === 'HAFU');
-  if (hafu) {
-    const hfOpts = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负'];
-    hfOpts.forEach(pick => plays.push({ pick, result: 'pending' }));
+  // HAFU = 半全场（赔率串）
+  const hafu = byCode.HAFU;
+  if (hafu && hafu.odds) {
+    const m = parseOddsString(hafu.odds);
+    if (Object.keys(m).length) plays.push({ key: 'half_full', pick: Object.keys(m).join('/'), odds: m, result: 'pending' });
   }
 
-  return JSON.stringify(plays.slice(0, 50));
+  return JSON.stringify(plays);
 }
 
 // 解析 matchNum → weekday + matchNo

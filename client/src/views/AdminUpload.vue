@@ -165,7 +165,8 @@
           <div class="item-plays">
             <div v-for="(p, key) in parsePlays(r.handicap)" :key="key" class="play-line" :class="p.result">
               <span class="play-label">{{ playLabel(key) }}</span>
-              <span class="play-pick">{{ p.pick || '-' }}</span>
+              <span class="play-pick">{{ p.pick || '-' }}<span v-if="p.line" class="play-line-tag"> ({{ p.line }})</span></span>
+              <span v-if="p.odds" class="play-odds">{{ formatOdds(p.odds) }}</span>
               <span class="play-result">{{ resultDot(p.result) }}</span>
             </div>
           </div>
@@ -223,6 +224,17 @@
         </div>
         <div class="modal-body">
           <div class="muted mb-8">{{ contextModal.record?.league }} | {{ contextModal.record?.home_team }} VS {{ contextModal.record?.away_team }} | {{ formatTime(contextModal.record?.match_time) }}</div>
+          <!-- 竞彩官方赔率（来自同步数据） -->
+          <div class="ctx-row">
+            <span class="ctx-key">竞彩官方赔率</span>
+            <div class="odds-grid">
+              <div v-for="(p, key) in parsePlays(contextModal.record?.handicap)" :key="key" v-show="p.pick" class="odds-cell">
+                <div class="odds-cell-label">{{ playLabel(key) }}<span v-if="p.line" class="odds-cell-line">{{ p.line }}</span></div>
+                <div class="odds-cell-pick">{{ p.pick }}</div>
+                <div v-if="p.odds" class="odds-cell-odds">{{ formatOdds(p.odds) }}</div>
+              </div>
+            </div>
+          </div>
           <div v-if="contextModal.loading" class="muted">查询 API-Football 中（今日免费额度 100 次）...</div>
           <div v-else-if="!contextModal.data || contextModal.data.error" class="muted">
             {{ contextModal.data?.error || '暂无数据。点击“AI 提示词”获取完整提示词模板。' }}
@@ -441,13 +453,32 @@ function catClass(c) { return { '人工扫盘': 'cat-manual', 'AI扫盘': 'cat-a
 function statusLabel(s) { return { pending: '📝 草稿', published: '✅ 已发布', settled: '🏁 已结算' }[s] || s }
 function playLabel(k) { return { win_draw_loss: '胜平负', handicap: '让球', score: '比分', goals: '进球', half_full: '半全' }[k] || k }
 function resultDot(r) { return { win: '✅', loss: '❌', push: '🔄', pending: '⏳' }[r] || '-' }
+function formatOdds(odds) {
+  if (!odds || typeof odds !== 'object') return ''
+  return Object.entries(odds).map(([k, val]) => `${k} ${val}`).join(' / ')
+}
 function parsePlays(h) {
   if (!h) return {}
   let v
   try { v = JSON.parse(h) } catch (e) { v = h }
-  // 已经是期望的分组对象，直接返回
-  if (v && typeof v === 'object' && !Array.isArray(v)) return v
-  // 同步脚本写入的是数组 [{pick, handicap, result}, ...] → 按玩法归类
+  // 已经是期望的分组对象，直接返回（补齐 odds/line 字段）
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const out = {}
+    for (const k of ['win_draw_loss','handicap','score','goals','half_full']) {
+      out[k] = v[k] ? { pick: v[k].pick || '', result: v[k].result || 'pending', odds: v[k].odds, line: v[k].line } : { pick: '', result: 'pending' }
+    }
+    return out
+  }
+  // 新分组数组 [{key, pick, odds, line, result}] → 转成对象
+  if (Array.isArray(v) && v.some(p => p && p.key)) {
+    const out = { win_draw_loss:{pick:'',result:'pending'}, handicap:{pick:'',result:'pending'}, score:{pick:'',result:'pending'}, goals:{pick:'',result:'pending'}, half_full:{pick:'',result:'pending'} }
+    for (const p of v) {
+      if (!p || !p.key) continue
+      out[p.key] = { pick: p.pick || '', result: p.result || 'pending', odds: p.odds, line: p.line }
+    }
+    return out
+  }
+  // 旧数组格式 [{pick, handicap, result}, ...] → 按玩法归类
   if (Array.isArray(v)) {
     const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它']
     const GOALS = ['0','1','2','3','4','5','6','7+']
@@ -667,18 +698,29 @@ function renderPlaysMini(h) {
   if (!h) return '-'
   let arr; try { arr = JSON.parse(h) } catch(e) { return h.slice(0, 60) }
   if (!Array.isArray(arr)) return '-'
-  const wdl = arr.filter(p => ['胜','平','负'].includes(String(p.pick))).map(p => p.pick).join('/')
-  return wdl || '-'
+  const wdl = arr.find(p => p.key === 'win_draw_loss')
+  if (wdl) {
+    const odds = wdl.odds ? ' ' + formatOdds(wdl.odds) : ''
+    return (wdl.pick || '-') + odds
+  }
+  const old = arr.filter(p => ['胜','平','负'].includes(String(p.pick))).map(p => p.pick).join('/')
+  return old || '-'
 }
 // 渲染让球盘口
 function renderHandicapLine(h) {
   if (!h) return '-'
   let arr; try { arr = JSON.parse(h) } catch(e) { return '-' }
   if (!Array.isArray(arr)) return '-'
-  const hc = arr.filter(p => String(p.pick || '').startsWith('让'))
-  if (!hc.length) return '-'
-  const lines = [...new Set(hc.map(p => p.handicap).filter(Boolean))].join('/')
-  const picks = [...new Set(hc.map(p => p.pick))].join('/')
+  const hc = arr.find(p => p.key === 'handicap')
+  if (hc) {
+    const odds = hc.odds ? ' ' + formatOdds(hc.odds) : ''
+    const line = hc.line ? hc.line + ' ' : ''
+    return line + (hc.pick || '-') + odds
+  }
+  const old = arr.filter(p => String(p.pick || '').startsWith('让'))
+  if (!old.length) return '-'
+  const lines = [...new Set(old.map(p => p.handicap).filter(Boolean))].join('/')
+  const picks = [...new Set(old.map(p => p.pick))].join('/')
   return lines ? `${lines} ${picks}` : picks
 }
 // 渲染比分/进球/半全
@@ -686,13 +728,22 @@ function renderOtherPlays(h) {
   if (!h) return '-'
   let arr; try { arr = JSON.parse(h) } catch(e) { return '-' }
   if (!Array.isArray(arr)) return '-'
+  const get = k => arr.find(p => p.key === k)
+  const score = get('score'), goals = get('goals'), hf = get('half_full')
+  if (score || goals || hf) {
+    const parts = []
+    if (score) parts.push(`比分${score.odds ? ' ' + formatOdds(score.odds) : ''}`)
+    if (goals) parts.push(`进球${goals.odds ? ' ' + formatOdds(goals.odds) : ''}`)
+    if (hf) parts.push(`半全${hf.odds ? ' ' + formatOdds(hf.odds) : ''}`)
+    return parts.join(' · ')
+  }
   const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它']
   const GOALS = ['0','1','2','3','4','5','6','7+']
   const HF = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负']
   const scores = arr.filter(p => SCORE.includes(p.pick)).map(p => p.pick)
-  const goals = arr.filter(p => GOALS.includes(p.pick)).map(p => p.pick)
-  const hf = arr.filter(p => HF.includes(p.pick)).map(p => p.pick)
-  return [scores.length && `比分${scores.length}`, goals.length && `进球${goals.length}`, hf.length && `半全${hf.length}`].filter(Boolean).join(' · ') || '-'
+  const goalsA = arr.filter(p => GOALS.includes(p.pick)).map(p => p.pick)
+  const hfa = arr.filter(p => HF.includes(p.pick)).map(p => p.pick)
+  return [scores.length && `比分${scores.length}`, goalsA.length && `进球${goalsA.length}`, hfa.length && `半全${hfa.length}`].filter(Boolean).join(' · ') || '-'
 }
 
 // 显示基本信息（供 AI 提示词用）
@@ -900,6 +951,19 @@ onMounted(loadRecords)
 .ctx-row { background: #0D1117; border: 1px solid #21262D; border-radius: 6px; padding: 10px; }
 .ctx-key { display: block; font-size: 12px; color: #58A6FF; margin-bottom: 6px; font-weight: 600; }
 .ctx-val { margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #C9D1D9; white-space: pre-wrap; max-height: 180px; overflow-y: auto; }
+
+.odds-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.odds-cell { background: #0D1117; border: 1px solid #21262D; border-radius: 6px; padding: 8px 10px; min-width: 120px; }
+.odds-cell-label { font-size: 11px; color: #58A6FF; font-weight: 600; margin-bottom: 4px; }
+.odds-cell-line { color: #8B949E; font-weight: 400; margin-left: 4px; }
+.odds-cell-pick { font-size: 13px; color: #C9D1D9; margin-bottom: 4px; }
+.odds-cell-odds { font-size: 12px; color: #3FB950; font-family: 'JetBrains Mono', monospace; }
+
+.play-odds { font-size: 11px; color: #3FB950; font-family: 'JetBrains Mono', monospace; margin-left: 6px; }
+.play-line-tag { font-size: 11px; color: #8B949E; }
+
+/* 历史赔率弹窗中的 odds 渲染 */
+.cell-odds { font-size: 11px; color: #3FB950; font-family: 'JetBrains Mono', monospace; }
 
 .mono { font-family: 'JetBrains Mono', monospace; }
 

@@ -79,7 +79,8 @@
         <div class="plays" v-if="r.odds != null">
           <div v-for="(p, key) in parsePlays(r.handicap)" :key="key" class="play-line" :class="p.result">
             <span class="play-label">{{ playLabel(key) }}</span>
-            <span class="play-pick">{{ p.pick || '-' }}</span>
+            <span class="play-pick">{{ p.pick || '-' }}<span v-if="p.line" class="play-line-tag"> ({{ p.line }})</span></span>
+            <span v-if="p.odds" class="play-odds">{{ formatOdds(p.odds) }}</span>
             <span class="play-result">{{ resultDot(p.result) }}</span>
           </div>
         </div>
@@ -205,13 +206,21 @@ async function unlockRecord(r) {
 
 const playLabelMap = { win_draw_loss: '胜平负', handicap: '让球', score: '比分', goals: '进球', half_full: '半全' }
 function playLabel(key) { return playLabelMap[key] || key }
+function formatOdds(odds) {
+  if (!odds || typeof odds !== 'object') return ''
+  return Object.entries(odds).map(([k, val]) => `${k} ${val}`).join(' / ')
+}
 
 function parsePlays(handicapStr) {
   if (!handicapStr) return []
   let v
   try { v = JSON.parse(handicapStr) } catch (e) { return [] }
   if (Array.isArray(v)) {
-    // 同步脚本写入的格式：[{pick, handicap, result}, ...]
+    // 新分组格式：[{key, pick, odds, line, result}, ...]
+    if (v.some(p => p && p.key)) {
+      return v.filter(p => p && p.key).map(p => ({ key: p.key, pick: p.pick || '', line: p.line, odds: p.odds, result: p.result || 'pending' }))
+    }
+    // 旧格式：[{pick, handicap, result}, ...]
     const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它']
     const GOALS = ['0','1','2','3','4','5','6','7+']
     const HF = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负']
@@ -316,7 +325,9 @@ onMounted(loadData)
 
 .league-tag { font-size: 11px; color: #58A6FF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plays { display: flex; flex-direction: column; gap: 4px; align-self: start; }
-.play-line { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: rgba(33,38,45,0.5); }
+.play-line { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: rgba(33,38,45,0.5); flex-wrap: wrap; }
+.play-odds { font-size: 11px; color: #3FB950; font-family: 'JetBrains Mono', monospace; }
+.play-line-tag { font-size: 11px; color: #8B949E; }
 .play-line.win { background: rgba(63,185,80,0.1); }
 .play-line.loss { background: rgba(248,81,73,0.1); }
 .play-line.push { background: rgba(139,148,158,0.1); }
