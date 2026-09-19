@@ -17,6 +17,7 @@ const routes = [
   { path: '/admin/plans', name: 'AdminPlans', component: () => import('@/views/AdminPlans.vue'), meta: { requiresAdmin: true } },
   { path: '/profile', name: 'Profile', component: () => import('@/views/Profile.vue'), meta: { requiresAuth: true } },
   { path: '/analysis', name: 'Analysis', component: () => import('@/views/Analysis.vue') },
+  { path: '/analysis/match', name: 'MatchAnalysis', component: () => import('@/views/MatchAnalysis.vue') },
   { path: '/analysis/:id', name: 'AnalysisDetail', component: () => import('@/views/AnalysisDetail.vue') },
   { path: '/admin/analysis', name: 'AdminAnalysis', component: () => import('@/views/AdminAnalysis.vue'), meta: { requiresAdmin: true } },
 ]

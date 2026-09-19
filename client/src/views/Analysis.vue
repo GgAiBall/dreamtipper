@@ -3,6 +3,9 @@
     <div class="page-header">
       <h1>📡 实时分析</h1>
       <p>赛事实时分析、赛前观点与深度拆解，由分析师持续更新。</p>
+      <div class="header-actions">
+        <router-link to="/analysis/match" class="btn btn-ai">🤖 AI 赛事分析</router-link>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
@@ -77,4 +80,7 @@ onMounted(async () => {
 .card-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 12px; color: #8B949E; }
 .read-more { color: #58A6FF; font-weight: 600; }
 .mono { font-family: 'JetBrains Mono', monospace; }
+.header-actions { margin-top: 12px; }
+.btn-ai { display: inline-flex; align-items: center; padding: 10px 20px; border-radius: 8px; background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; transition: all 0.15s; }
+.btn-ai:hover { background: linear-gradient(135deg, #8B5CF6 0%, #C084FC 100%); }
 </style>

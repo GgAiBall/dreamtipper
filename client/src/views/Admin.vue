@@ -9,6 +9,7 @@
         <router-link to="/admin/members" class="nav-item">会员管理</router-link>
         <router-link to="/admin/plans" class="nav-item">方案定义</router-link>
         <router-link to="/admin/analysis" class="nav-item">📡 实时分析</router-link>
+        <router-link to="/analysis/match" class="nav-item ai-nav">🤖 AI分析入口</router-link>
         <router-link to="/" class="nav-item">← 返回前台</router-link>
       </div>
     </div>
@@ -92,4 +93,6 @@ onMounted(async () => {
 .qa-btn { padding: 10px 20px; background: #21262D; border: 1px solid #30363D; border-radius: 8px; color: #8B949E; font-size: 13px; text-decoration: none; transition: all 0.2s; }
 .qa-btn:hover { background: #30363D; color: #E6EDF3; }
 .mono { font-family: 'JetBrains Mono', monospace; }
+.ai-nav { color: #A371F7 !important; font-weight: 600; }
+.ai-nav:hover { color: #C9B8FF !important; }
 </style>

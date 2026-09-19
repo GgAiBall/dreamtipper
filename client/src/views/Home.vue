@@ -13,6 +13,7 @@
           <router-link to="/plans">方案市场</router-link>
           <router-link to="/stats">战绩统计</router-link>
           <router-link to="/analysis">实时分析</router-link>
+          <router-link to="/analysis/match" class="ai-link">🤖 AI分析</router-link>
           <router-link to="/dashboard" v-if="auth.isLoggedIn">会员中心</router-link>
           <router-link to="/admin" v-if="auth.isAdmin" class="admin-link">管理后台</router-link>
         </nav>
@@ -36,6 +37,7 @@
         <div class="hero-actions">
           <router-link to="/data" class="btn btn-primary btn-lg">查看今日扫盘</router-link>
           <router-link to="/analysis" class="btn btn-ghost btn-lg">实时分析</router-link>
+          <router-link to="/analysis/match" class="btn btn-ai btn-lg">🤖 AI赛事分析</router-link>
           <router-link to="/stats" class="btn btn-ghost btn-lg">战绩统计</router-link>
         </div>
       </div>
@@ -330,6 +332,15 @@ onMounted(async () => {
 /* Loading */
 .loading { color: #8B949E; padding: 40px; text-align: center; }
 .empty-state { grid-column: 1/-1; text-align: center; color: #8B949E; padding: 40px; }
+
+/* AI Analysis Link */
+.ai-link { color: #A371F7 !important; font-weight: 600; }
+.ai-link:hover { color: #C9B8FF !important; }
+
+/* AI Button */
+.btn-ai { background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%); color: #fff !important; border: none; }
+.btn-ai:hover { background: linear-gradient(135deg, #8B5CF6 0%, #C084FC 100%); }
+.btn-lg { padding: 10px 20px; font-size: 14px; border-radius: 8px; }
 
 /* Footer */
 .footer { text-align: center; padding: 24px; border-top: 1px solid #21262D; color: #8B949E; font-size: 13px; }
