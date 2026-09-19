@@ -15,10 +15,25 @@
           <option value="">全部日期</option>
           <option v-for="d in availableDates" :key="d" :value="d">{{ d }}</option>
         </select>
-        <input v-model="filterText" placeholder="搜索球队名称..." class="filter-input" />
-        <button @click="loadSweepRecords" class="btn btn-ghost btn-sm">🔍 搜索</button>
+        <input v-model="filterText" placeholder="输入球队名/联赛名..." class="filter-input" />
+        <button @click="loadSweepRecords" class="btn btn-ghost btn-sm">📋 扫盘库</button>
+        <button @click="doOnlineSearch" class="btn btn-ghost btn-sm" :disabled="!filterText.trim() || searchLoading">
+          {{ searchLoading ? '搜索中...' : '🌐 联网搜索' }}
+        </button>
       </div>
 
+      <!-- 联网搜索结果 -->
+      <div v-if="searchResults.length > 0" class="records-list" style="margin-top:8px">
+        <div class="filter-tip" style="padding:4px 8px;font-size:12px;color:#8b949e">🌐 联网搜索「{{ searchQuery }}」，点击球队自动填充基本面：</div>
+        <div v-for="(r, idx) in searchResults" :key="idx" class="record-row search-result-row">
+          <span class="search-source-tag">{{ r.source === 'alias' ? '✅ 别名' : r.source === 'af' ? '🔍 API' : '📊 列表' }}</span>
+          <span class="r-teams">{{ r.name }}</span>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button class="btn btn-sm btn-ghost" @click="selectAsHome(r)">→ 主队</button>
+            <button class="btn btn-sm btn-ghost" @click="selectAsAway(r)">→ 客队</button>
+          </div>
+        </div>
+      </div>
       <div v-if="loadingRecords" class="loading">加载扫盘数据...</div>
       <div v-else class="records-list">
         <div v-for="r in filteredRecords" :key="r.id" class="record-row" :class="{ selected: selectedRecord && selectedRecord.id === r.id }" @click="selectRecord(r)">
@@ -169,6 +184,11 @@ const filterText = ref('')
 const loadingRecords = ref(false)
 const records = ref([])
 const selectedRecord = ref(null)
+const searchResults = ref([])
+const searchQuery = ref('')
+const searchLoading = ref(false)
+const homeTeam = ref('')
+const awayTeam = ref('')
 const copiedText = ref(false)
 const fetchingStats = ref(false)
 const statsError = ref('')
@@ -221,6 +241,71 @@ async function loadSweepRecords() {
     records.value = data.records || []
   } catch (e) { console.error(e) }
   loadingRecords.value = false
+}
+
+async function doOnlineSearch() {
+  const q = filterText.value.trim()
+  if (!q) return
+  searchQuery.value = q
+  searchLoading.value = true
+  searchResults.value = []
+  try {
+    const { data } = await api.get('/football/search-teams', { params: { q, limit: 10 } })
+    searchResults.value = data.results || []
+    if (!searchResults.value.length) {
+      searchResults.value = [{ id: null, name: q, source: 'manual', logo: '' }]
+    }
+  } catch (e) {
+    console.error(e)
+    searchResults.value = [{ id: null, name: q, source: 'manual', logo: '' }]
+  }
+  searchLoading.value = false
+}
+
+function selectAsHome(team) {
+  homeTeam.value = team.name
+  selectedRecord.value = {
+    id: 'online-' + Date.now(),
+    home_team: team.name,
+    away_team: awayTeam.value || '待定',
+    league: '',
+    match_time: new Date().toISOString(),
+    match_no: '',
+    weekday: new Date().getDay() || 7,
+    source: 'online',
+    teamId: team.id,
+  }
+  searchResults.value = []
+  filterText.value = ''
+  statsLoaded.value = false
+  statsError.value = ''
+  form.value = { home_form: '', away_form: '', home_goals_per_game: '', home_concede_per_game: '', away_goals_per_game: '', away_concede_per_game: '', home_points: '', away_points: '', home_home_record: '', away_away_record: '', home_injuries: '', away_injuries: '', h2h: '', notes: '' }
+  fetchMatchStats(team.name, awayTeam.value || '')
+}
+
+function selectAsAway(team) {
+  awayTeam.value = team.name
+  if (homeTeam.value) {
+    selectedRecord.value = {
+      id: 'online-' + Date.now(),
+      home_team: homeTeam.value,
+      away_team: team.name,
+      league: '',
+      match_time: new Date().toISOString(),
+      match_no: '',
+      weekday: new Date().getDay() || 7,
+      source: 'online',
+      teamId: team.id,
+    }
+    searchResults.value = []
+    filterText.value = ''
+    statsLoaded.value = false
+    statsError.value = ''
+    form.value = { home_form: '', away_form: '', home_goals_per_game: '', home_concede_per_game: '', away_goals_per_game: '', away_concede_per_game: '', home_points: '', away_points: '', home_home_record: '', away_away_record: '', home_injuries: '', away_injuries: '', h2h: '', notes: '' }
+    fetchMatchStats(homeTeam.value, team.name)
+  } else {
+    searchResults.value = searchResults.value
+  }
 }
 
 function selectRecord(r) {
@@ -495,7 +580,6 @@ onMounted(() => {
 .btn-ghost:hover { border-color: #58A6FF; color: #58A6FF; }
 .mono { font-family: 'JetBrains Mono', monospace; }
 
-@media (max-width: 600px) {
-  .ai-grid { grid-template-columns: repeat(2, 1fr); }
-}
+.search-result-row { background: #1c2128; border: 1px solid #388bfd; }
+.search-source-tag { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #1f6feb22; color: #58a6ff; margin-right: 8px; }
 </style>
