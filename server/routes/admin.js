@@ -284,6 +284,36 @@ router.get('/sweep', adminAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// 单条扫盘的赔率历史（查看赔率变化）
+router.get('/sweep/:id/odds-history', adminAuth, async (req, res) => {
+  try {
+    const rows = await queryAll(
+      `SELECT id, handicap, odds, odds_type, source, captured_at FROM sweep_odds_history WHERE sweep_id = ? ORDER BY captured_at DESC LIMIT 100`,
+      [req.params.id]
+    );
+    res.json({ history: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 单条扫盘的基本信息（供 AI 生成提示词用）
+router.get('/sweep/:id/context', adminAuth, async (req, res) => {
+  try {
+    const row = await queryOne(`SELECT * FROM sweep_records WHERE id = ?`, [req.params.id]);
+    if (!row) return res.status(404).json({ error: '记录不存在' });
+    let ctx = null;
+    try {
+      const { buildSummary, findTeamAF, getTeamStandings, getTeamForm, getHeadToHead } = require('../footballApi');
+      const summary = await buildSummary({
+        league: row.league, home: row.home_team, away: row.away_team, date: row.match_time,
+      });
+      ctx = summary;
+    } catch (e) {
+      ctx = { error: e.message };
+    }
+    res.json({ record: row, context: ctx });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ========== 方案上传（用户付费解锁的方案）==========
 router.post('/upload/plan', adminAuth, upload.single('file'), async (req, res) => {
   try {

@@ -210,7 +210,29 @@ function parsePlays(handicapStr) {
   if (!handicapStr) return []
   let v
   try { v = JSON.parse(handicapStr) } catch (e) { return [] }
-  if (Array.isArray(v)) return v
+  if (Array.isArray(v)) {
+    // 同步脚本写入的格式：[{pick, handicap, result}, ...]
+    const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它']
+    const GOALS = ['0','1','2','3','4','5','6','7+']
+    const HF = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负']
+    const wdlPicks = [], hcPicks = [], hcLines = [], scorePicks = [], goalPicks = [], hfPicks = []
+    for (const p of v) {
+      const pick = String(p.pick || '')
+      const result = p.result || 'pending'
+      if (pick === '胜' || pick === '平' || pick === '负') wdlPicks.push({ pick, result })
+      else if (pick.startsWith('让')) { hcPicks.push({ pick, result }); if (p.handicap != null && p.handicap !== '') hcLines.push(String(p.handicap)) }
+      else if (SCORE.includes(pick)) scorePicks.push({ pick, result })
+      else if (GOALS.includes(pick)) goalPicks.push({ pick, result })
+      else if (HF.includes(pick)) hfPicks.push({ pick, result })
+    }
+    const arr = []
+    if (wdlPicks.length) arr.push({ key: 'win_draw_loss', pick: wdlPicks.map(x=>x.pick).join('/'), result: wdlPicks[wdlPicks.length-1].result })
+    if (hcPicks.length) arr.push({ key: 'handicap', pick: hcLines.length ? hcLines.join('/') + ' ' + hcPicks.map(x=>x.pick).join('/') : hcPicks.map(x=>x.pick).join('/'), result: hcPicks[hcPicks.length-1].result })
+    if (scorePicks.length) arr.push({ key: 'score', pick: scorePicks.map(x=>x.pick).join('/'), result: scorePicks[scorePicks.length-1].result })
+    if (goalPicks.length) arr.push({ key: 'goals', pick: goalPicks.map(x=>x.pick).join('/'), result: goalPicks[goalPicks.length-1].result })
+    if (hfPicks.length) arr.push({ key: 'half_full', pick: hfPicks.map(x=>x.pick).join('/'), result: hfPicks[hfPicks.length-1].result })
+    return arr
+  }
   if (v && typeof v === 'object') {
     // 把 { win_draw_loss: {pick,result}, ... } 转成 [{key, pick, result}]
     return Object.entries(v).map(([key, val]) => ({

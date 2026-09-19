@@ -179,12 +179,78 @@
           <button v-if="r.status === 'pending'" @click="publish(r.id)" class="btn btn-success btn-sm">📤 发布</button>
           <button v-else-if="r.status === 'published' || r.status === 'settled'" @click="unpublish(r.id)" class="btn btn-ghost btn-sm">↩️ 撤回</button>
           <button @click="fetchResult(r.id)" class="btn btn-ghost btn-sm" :disabled="fetching">🔄 获取结果</button>
+          <button @click="showHistory(r)" class="btn btn-ghost btn-sm">📈 赔率变化</button>
+          <button @click="showContext(r)" class="btn btn-ghost btn-sm">📊 基本信息</button>
           <button @click="editRecord(r)" class="btn btn-ghost btn-sm">✏️ 修改</button>
           <button @click="removeRecord(r.id)" class="btn btn-ghost btn-sm danger">删除</button>
         </div>
       </div>
     </div>
     <div v-else class="empty">暂无扫盘数据</div>
+
+    <!-- 赔率历史弹窗 -->
+    <div v-if="historyModal.open" class="modal-mask" @click.self="historyModal.open = false">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>📈 赔率变化历史</h3>
+          <button @click="historyModal.open = false" class="btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="muted mb-8">{{ historyModal.record?.league }} | {{ historyModal.record?.home_team }} VS {{ historyModal.record?.away_team }} | {{ weekdayLabel(historyModal.record?.weekday) }} {{ historyModal.record?.match_no }}</div>
+          <div v-if="historyModal.loading" class="muted">加载中...</div>
+          <div v-else-if="!historyModal.list.length" class="empty">暂无赔率变化记录（同步脚本未检测到赔率变动时不会写入历史）</div>
+          <table v-else class="odds-table">
+            <thead><tr><th>时间</th><th>胜平负</th><th>让球</th><th>比分/进球/半全</th></tr></thead>
+            <tbody>
+              <tr v-for="(h, idx) in historyModal.list" :key="h.id || idx">
+                <td class="mono">{{ formatDate(h.captured_at) }}</td>
+                <td><div class="cell-mini" v-html="renderPlaysMini(h.handicap)"></div></td>
+                <td><div class="cell-mini">{{ renderHandicapLine(h.handicap) }}</div></td>
+                <td><div class="cell-mini muted">{{ renderOtherPlays(h.handicap) }}</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 基本信息弹窗（供 AI 生成提示词用） -->
+    <div v-if="contextModal.open" class="modal-mask" @click.self="contextModal.open = false">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>📊 基本信息（AI 提示词素材）</h3>
+          <button @click="contextModal.open = false" class="btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="muted mb-8">{{ contextModal.record?.league }} | {{ contextModal.record?.home_team }} VS {{ contextModal.record?.away_team }} | {{ formatTime(contextModal.record?.match_time) }}</div>
+          <div v-if="contextModal.loading" class="muted">查询 API-Football 中（今日免费额度 100 次）...</div>
+          <div v-else-if="!contextModal.data || contextModal.data.error" class="muted">
+            {{ contextModal.data?.error || '暂无数据。点击“AI 提示词”获取完整提示词模板。' }}
+          </div>
+          <div v-else class="ctx-block">
+            <div class="ctx-row">
+              <span class="ctx-key">积分榜</span>
+              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.standings || '暂无', null, 2) }}</pre>
+            </div>
+            <div class="ctx-row">
+              <span class="ctx-key">近况</span>
+              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.form || '暂无', null, 2) }}</pre>
+            </div>
+            <div class="ctx-row">
+              <span class="ctx-key">场均数据</span>
+              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.stats || '暂无', null, 2) }}</pre>
+            </div>
+            <div class="ctx-row">
+              <span class="ctx-key">历史交锋</span>
+              <pre class="ctx-val">{{ JSON.stringify(contextModal.data.h2h || '暂无', null, 2) }}</pre>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <a v-if="contextModal.record" :href="`/analysis/match?home=${encodeURIComponent(contextModal.record.home_team)}&away=${encodeURIComponent(contextModal.record.away_team)}&league=${encodeURIComponent(contextModal.record.league)}&date=${encodeURIComponent(contextModal.record.match_time)}`" target="_blank" class="btn btn-primary btn-sm">🤖 跳转到 AI 分析页</a>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 编辑弹窗 -->
     <div v-if="editing" class="modal-mask" @click.self="editing = null">
@@ -302,6 +368,10 @@ const selectedIds = ref([])
 const showCreate = ref(false)
 const submitting = ref(false)
 const submitMsg = ref(null)
+// 赔率历史弹窗
+const historyModal = ref({ open: false, record: null, list: [], loading: false })
+// 基本信息弹窗
+const contextModal = ref({ open: false, record: null, data: null, loading: false })
 
 // ===== 玩法下拉选项定义 =====
 const WDL_OPTIONS = ['胜', '平', '负']
@@ -375,7 +445,33 @@ function parsePlays(h) {
   if (!h) return {}
   let v
   try { v = JSON.parse(h) } catch (e) { v = h }
+  // 已经是期望的分组对象，直接返回
   if (v && typeof v === 'object' && !Array.isArray(v)) return v
+  // 同步脚本写入的是数组 [{pick, handicap, result}, ...] → 按玩法归类
+  if (Array.isArray(v)) {
+    const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它']
+    const GOALS = ['0','1','2','3','4','5','6','7+']
+    const HF = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负']
+    const out = { win_draw_loss: { pick: '', result: 'pending' }, handicap: { pick: '', result: 'pending' }, score: { pick: '', result: 'pending' }, goals: { pick: '', result: 'pending' }, half_full: { pick: '', result: 'pending' } }
+    const wdlPicks = [], hcPicks = [], hcLines = [], scorePicks = [], goalPicks = [], hfPicks = []
+    for (const p of v) {
+      const pick = String(p.pick || '')
+      const result = p.result || 'pending'
+      if (pick === '胜' || pick === '平' || pick === '负') wdlPicks.push({ pick, result })
+      else if (pick.startsWith('让')) { hcPicks.push({ pick, result }); if (p.handicap != null && p.handicap !== '') hcLines.push(String(p.handicap)) }
+      else if (SCORE.includes(pick)) scorePicks.push({ pick, result })
+      else if (GOALS.includes(pick)) goalPicks.push({ pick, result })
+      else if (HF.includes(pick)) hfPicks.push({ pick, result })
+    }
+    // 取最后一个 result（模拟多选最后一项）
+    const pickWithResult = arr => arr.length ? arr.map(x => x.pick).join('/') + (arr.some(x => x.result !== 'pending') ? ' · ' + arr[arr.length-1].result : '') : ''
+    if (wdlPicks.length) { out.win_draw_loss.pick = wdlPicks.map(x=>x.pick).join('/'); out.win_draw_loss.result = wdlPicks[wdlPicks.length-1].result }
+    if (hcPicks.length) { out.handicap.pick = hcLines.length ? hcLines.join('/') + ' ' + hcPicks.map(x=>x.pick).join('/') : hcPicks.map(x=>x.pick).join('/'); out.handicap.result = hcPicks[hcPicks.length-1].result }
+    if (scorePicks.length) { out.score.pick = scorePicks.map(x=>x.pick).join('/'); out.score.result = scorePicks[scorePicks.length-1].result }
+    if (goalPicks.length) { out.goals.pick = goalPicks.map(x=>x.pick).join('/'); out.goals.result = goalPicks[goalPicks.length-1].result }
+    if (hfPicks.length) { out.half_full.pick = hfPicks.map(x=>x.pick).join('/'); out.half_full.result = hfPicks[hfPicks.length-1].result }
+    return out
+  }
   return { handicap: { pick: String(v), result: 'pending' } }
 }
 function formatTime(t) { if (!t) return '-'; return new Date(t).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
@@ -553,6 +649,65 @@ const uploading = ref(false)
 const uploadResult = ref(null)
 
 const fetching = ref(false)
+
+// 显示赔率变化历史
+async function showHistory(r) {
+  historyModal.value = { open: true, record: r, list: [], loading: true }
+  try {
+    const { data } = await api.get(`/admin/sweep/${r.id}/odds-history`)
+    historyModal.value.list = data.history || []
+  } catch (e) {
+    historyModal.value.list = []
+  } finally {
+    historyModal.value.loading = false
+  }
+}
+// 渲染胜平负列
+function renderPlaysMini(h) {
+  if (!h) return '-'
+  let arr; try { arr = JSON.parse(h) } catch(e) { return h.slice(0, 60) }
+  if (!Array.isArray(arr)) return '-'
+  const wdl = arr.filter(p => ['胜','平','负'].includes(String(p.pick))).map(p => p.pick).join('/')
+  return wdl || '-'
+}
+// 渲染让球盘口
+function renderHandicapLine(h) {
+  if (!h) return '-'
+  let arr; try { arr = JSON.parse(h) } catch(e) { return '-' }
+  if (!Array.isArray(arr)) return '-'
+  const hc = arr.filter(p => String(p.pick || '').startsWith('让'))
+  if (!hc.length) return '-'
+  const lines = [...new Set(hc.map(p => p.handicap).filter(Boolean))].join('/')
+  const picks = [...new Set(hc.map(p => p.pick))].join('/')
+  return lines ? `${lines} ${picks}` : picks
+}
+// 渲染比分/进球/半全
+function renderOtherPlays(h) {
+  if (!h) return '-'
+  let arr; try { arr = JSON.parse(h) } catch(e) { return '-' }
+  if (!Array.isArray(arr)) return '-'
+  const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它']
+  const GOALS = ['0','1','2','3','4','5','6','7+']
+  const HF = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负']
+  const scores = arr.filter(p => SCORE.includes(p.pick)).map(p => p.pick)
+  const goals = arr.filter(p => GOALS.includes(p.pick)).map(p => p.pick)
+  const hf = arr.filter(p => HF.includes(p.pick)).map(p => p.pick)
+  return [scores.length && `比分${scores.length}`, goals.length && `进球${goals.length}`, hf.length && `半全${hf.length}`].filter(Boolean).join(' · ') || '-'
+}
+
+// 显示基本信息（供 AI 提示词用）
+async function showContext(r) {
+  contextModal.value = { open: true, record: r, data: null, loading: true }
+  try {
+    const { data } = await api.get(`/admin/sweep/${r.id}/context`)
+    contextModal.value.data = data.context
+  } catch (e) {
+    contextModal.value.data = { error: e.response?.data?.error || e.message }
+  } finally {
+    contextModal.value.loading = false
+  }
+}
+
 async function fetchResult(id) {
   fetching.value = true
   try {
@@ -721,10 +876,30 @@ onMounted(loadRecords)
 
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: #161B22; border: 1px solid #30363D; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; }
+.modal-lg { max-width: 800px; max-height: 90vh; overflow-y: auto; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.modal-head h3 { font-size: 16px; margin: 0; }
+.btn-close { background: transparent; border: none; color: #8B949E; font-size: 24px; cursor: pointer; padding: 0 8px; line-height: 1; }
+.btn-close:hover { color: #58A6FF; }
+.modal-body { font-size: 13px; }
+.modal-foot { margin-top: 16px; padding-top: 12px; border-top: 1px solid #21262D; }
 .modal-large { max-width: 700px; max-height: 90vh; overflow-y: auto; }
 .modal h3 { font-size: 16px; margin-bottom: 16px; }
 .modal-hint { font-size: 12px; color: #8B949E; font-weight: 400; }
 .modal-actions { display: flex; gap: 12px; margin-top: 16px; }
+
+.muted { color: #8B949E; }
+.mb-8 { margin-bottom: 8px; }
+.odds-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.odds-table th, .odds-table td { padding: 8px; border-bottom: 1px solid #21262D; text-align: left; vertical-align: top; }
+.odds-table th { color: #8B949E; font-weight: 600; }
+.odds-table tbody tr:hover { background: #0D1117; }
+.cell-mini { font-size: 12px; color: #C9D1D9; }
+
+.ctx-block { display: flex; flex-direction: column; gap: 12px; }
+.ctx-row { background: #0D1117; border: 1px solid #21262D; border-radius: 6px; padding: 10px; }
+.ctx-key { display: block; font-size: 12px; color: #58A6FF; margin-bottom: 6px; font-weight: 600; }
+.ctx-val { margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #C9D1D9; white-space: pre-wrap; max-height: 180px; overflow-y: auto; }
 
 .mono { font-family: 'JetBrains Mono', monospace; }
 

@@ -72,6 +72,9 @@ async function initDb() {
 
   // 用户解锁记录表（免费用户每日 3 次解锁会员场次的记录）
   await db.execute(`CREATE TABLE IF NOT EXISTS user_unlocks (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sweep_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), UNIQUE(user_id, sweep_id))`);
+  // 扫盘赔率历史（每次同步检测到变化时插入一条）
+  await db.execute(`CREATE TABLE IF NOT EXISTS sweep_odds_history (id TEXT PRIMARY KEY, sweep_id TEXT NOT NULL, captured_at TEXT DEFAULT (datetime('now')), handicap TEXT, odds REAL, odds_type TEXT, source TEXT DEFAULT 'sync')`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_sweep_odds_history ON sweep_odds_history (sweep_id, captured_at DESC)`);
 
   // 实时分析文章（管理员上传，前台实时分析界面展示）
   await db.execute(`CREATE TABLE IF NOT EXISTS analysis_posts (id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT DEFAULT '实时分析', content TEXT DEFAULT '', image_url TEXT, tier_required TEXT DEFAULT 'free', created_by TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);

@@ -91,39 +91,44 @@ async function fetchAllSellingMatches() {
   return matches;
 }
 
-// 从数据库查询已有 matchNum（今日起前后7天）
+// 从数据库查询已有记录（今日起前后7天），返回 matchNum → {id, handicap, odds, odds_type}
 async function getExistingMatchNums(db, daysBack = 7, daysForward = 14) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - daysBack);
   const future = new Date();
   future.setDate(future.getDate() + daysForward);
-  const sql = `SELECT id, match_id, weekday, match_no, home_team, away_team, league, match_time FROM sweep_records WHERE match_time >= ? AND match_time <= ?`;
+  const sql = `SELECT id, weekday, match_no, handicap, odds, odds_type FROM sweep_records WHERE match_time >= ? AND match_time <= ?`;
   const today = cutoff.toISOString().slice(0, 10);
   const endDay = future.toISOString().slice(0, 10);
+  const map = new Map();
   try {
     if (db.type === 'turso') {
       const r = await db.client.execute({
         sql,
         args: [today + ' 00:00:00', endDay + ' 23:59:59'],
       });
-      const nums = new Set();
       for (const row of (r.rows || [])) {
         const wd = row.weekday, mn = row.match_no;
-        if (wd && mn) nums.add(String(Number(wd) * 1000 + parseInt(mn, 10)));
+        if (wd && mn) {
+          const key = String(Number(wd) * 1000 + parseInt(mn, 10));
+          map.set(key, { id: row.id, handicap: row.handicap, odds: row.odds, odds_type: row.odds_type });
+        }
       }
-      return nums;
+      return map;
     }
     const rows = db.exec(sql, [today + ' 00:00:00', endDay + ' 23:59:59']);
-    if (!rows.length || !rows[0].values.length) return new Set();
-    const nums = new Set();
+    if (!rows.length || !rows[0].values.length) return map;
     for (const row of rows[0].values) {
-      const [,, wd, mn] = row;
-      if (wd && mn) nums.add(String(wd * 1000 + parseInt(mn)));
+      const [id, wd, mn, handicap, odds, odds_type] = row;
+      if (wd && mn) {
+        const key = String(wd * 1000 + parseInt(mn));
+        map.set(key, { id, handicap, odds, odds_type });
+      }
     }
-    return nums;
+    return map;
   } catch(e) {
     console.error('[sync] 查询已有记录失败:', e.message);
-    return new Set();
+    return map;
   }
 }
 
@@ -235,8 +240,8 @@ async function runSync(opts) {
   }
 
   // 查询已有编号
-  const existingNums = await getExistingMatchNums(db);
-  console.log('[sync] 数据库已有记录:', existingNums.size, '条');
+  const existingMap = await getExistingMatchNums(db);
+  console.log('[sync] 数据库已有记录:', existingMap.size, '条');
 
   // 拉取竞彩赛程
   console.log('[sync] 正在拉取竞彩官网赛程...');
@@ -247,22 +252,34 @@ async function runSync(opts) {
     return { success: false, error: '竞彩官网无返回数据，可能已被限速或非销售时间' };
   }
 
-  // 过滤掉已有
-  const newMatches = matches.filter(m => {
-    if (!m.matchNum) return false;
-    return !existingNums.has(String(m.matchNum));
-  });
-  console.log('[sync] 其中新增（数据库无）:', newMatches.length, '场');
+  // 统计：新增 vs 有变化 vs 无变化
+  const newMatches = [];
+  const updatedMatches = [];
+  for (const m of matches) {
+    if (!m.matchNum) continue;
+    const key = String(m.matchNum);
+    const exist = existingMap.get(key);
+    if (!exist) newMatches.push(m);
+    else {
+      const newHandicap = extractHandicap(m.oddsList);
+      if ((exist.handicap || '') !== newHandicap) {
+        updatedMatches.push({ match: m, exist, newHandicap });
+      }
+    }
+  }
+  console.log('[sync] 新增:', newMatches.length, '场 | 赔率有变:', updatedMatches.length, '场');
 
-  if (!newMatches.length) {
-    console.log('[sync] ✅ 没有新增比赛，结束');
-    return { success: true, imported: 0, skipped: matches.length, message: '无新增比赛' };
+  if (!newMatches.length && !updatedMatches.length) {
+    console.log('[sync] ✅ 没有变化，结束');
+    return { success: true, imported: 0, updated: 0, skipped: matches.length, message: '无变化' };
   }
 
   // 写入数据库
   let imported = 0;
+  let updated = 0;
   let skipped = 0;
 
+  // 写入新记录
   for (const m of newMatches) {
     const { weekday, matchNo } = parseMatchNum(m.matchNum);
     if (!weekday) { skipped++; continue; }
@@ -274,11 +291,10 @@ async function runSync(opts) {
     const league = m.leagueFull || m.leagueAbb || '';
     const status = 'pending';
     const result = 'pending';
-    const category = '人工扫盘'; // 自动录入仍标记为人工
+    const category = '人工扫盘';
     const data_source = 'auto_sync';
     const uploaded_by = 'system-auto';
 
-    // 构造 INSERT
     const vals = [
       id, mid, league, m.homeTeam, m.awayTeam, matchTime,
       handicap, null, null, null, 'free', result, status,
@@ -287,7 +303,7 @@ async function runSync(opts) {
     ];
 
     if (dryRun) {
-      console.log('[DRY]', league, m.homeTeam, 'vs', m.awayTeam, '|', m.matchNumStr, m.matchDate, m.matchTime);
+      console.log('[DRY-NEW]', league, m.homeTeam, 'vs', m.awayTeam, '|', m.matchNumStr);
       imported++;
       continue;
     }
@@ -317,12 +333,47 @@ async function runSync(opts) {
     }
   }
 
+  // 检测到赔率变化的记录：先写历史，再更新当前
+  for (const u of updatedMatches) {
+    const m = u.match;
+    const exist = u.exist;
+    if (dryRun) {
+      console.log('[DRY-UPD]', m.leagueFull || m.leagueAbb, m.homeTeam, 'vs', m.awayTeam, '|', m.matchNumStr);
+      updated++;
+      continue;
+    }
+    try {
+      // 写历史（保留旧值）
+      const histId = uuid();
+      if (db.type === 'turso') {
+        await db.client.execute({
+          sql: `INSERT INTO sweep_odds_history (id, sweep_id, handicap, odds, odds_type, source) VALUES (?,?,?,?,?,?)`,
+          args: [histId, exist.id, exist.handicap || null, exist.odds, exist.odds_type || null, 'sync'],
+        });
+        // 更新当前
+        await db.client.execute({
+          sql: `UPDATE sweep_records SET handicap = ?, updated_at = datetime('now') WHERE id = ?`,
+          args: [u.newHandicap, exist.id],
+        });
+      } else {
+        db.run(`INSERT INTO sweep_odds_history (id, sweep_id, handicap, odds, odds_type, source) VALUES (?,?,?,?,?,?)`,
+          [histId, exist.id, exist.handicap || null, exist.odds, exist.odds_type || null, 'sync']);
+        db.run(`UPDATE sweep_records SET handicap = ?, updated_at = datetime('now') WHERE id = ?`, [u.newHandicap, exist.id]);
+      }
+      updated++;
+    } catch(e) {
+      console.error('[sync] 更新失败:', m.homeTeam, 'vs', m.awayTeam, e.message);
+      skipped++;
+    }
+  }
+
   console.log('[sync] ===== 同步完成 =====');
   console.log('[sync] 新增写入:', imported, '条');
+  console.log('[sync] 赔率更新:', updated, '条');
   console.log('[sync] 跳过/失败:', skipped, '条');
   console.log('[sync] 竞彩总数:', matches.length, '场');
 
-  return { success: true, imported, skipped, total: matches.length };
+  return { success: true, imported, updated, skipped, total: matches.length };
 }
 
 // 直接运行
