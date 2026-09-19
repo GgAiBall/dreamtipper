@@ -247,9 +247,9 @@
           <!-- Tab: 特征分析（竞彩官方 6 维） -->
           <div v-show="contextModal.tab==='feature'">
             <div v-if="contextModal.sporttery?.error" class="muted">{{ contextModal.sporttery.error }}</div>
-            <div v-else-if="!contextModal.sporttery?.feature?.data" class="muted">竞彩暂无特征分析数据</div>
+            <div v-else-if="!contextModal.sporttery?.feature" class="muted">竞彩暂无特征分析数据</div>
             <div v-else>
-              <div v-for="(item, key) in featureList(contextModal.sporttery.feature.data)" :key="key" class="feature-row">
+              <div v-for="(item, key) in featureList(contextModal.sporttery.feature)" :key="key" class="feature-row">
                 <div class="feature-row-title">{{ item.title }}</div>
                 <div class="feature-row-bars">
                   <div class="feature-bar"><span class="bar-home" :style="{width: item.homePct + '%'}"></span><span class="bar-text">{{ item.homeText }}</span></div>
@@ -260,15 +260,15 @@
           </div>
           <!-- Tab: 历史交锋 -->
           <div v-show="contextModal.tab==='h2h'">
-            <div v-if="!contextModal.sporttery?.history?.data" class="muted">暂无历史交锋</div>
+            <div v-if="!contextModal.sporttery?.history" class="muted">暂无历史交锋</div>
             <div v-else>
-              <div class="muted mb-8" v-if="contextModal.sporttery.history.data.statistics">
-                近{{ contextModal.sporttery.history.data.statistics.totalLegCnt || '?' }}场 胜 {{ contextModal.sporttery.history.data.statistics.winGoalMatchCnt }} 平 {{ contextModal.sporttery.history.data.statistics.drawMatchCnt }} 负 {{ contextModal.sporttery.history.data.statistics.lossGoalMatchCnt }}
+              <div class="muted mb-8" v-if="contextModal.sporttery.history.statistics">
+                近{{ contextModal.sporttery.history.statistics.totalLegCnt || '?' }}场 胜 {{ contextModal.sporttery.history.statistics.winGoalMatchCnt }} 平 {{ contextModal.sporttery.history.statistics.drawMatchCnt }} 负 {{ contextModal.sporttery.history.statistics.lossGoalMatchCnt }}
               </div>
-              <table class="h2h-table" v-if="contextModal.sporttery.history.data.matchList?.length">
+              <table class="h2h-table" v-if="contextModal.sporttery.history.matchList?.length">
                 <thead><tr><th>日期</th><th>赛事</th><th>主队</th><th>比分</th><th>客队</th><th>总进球</th></tr></thead>
                 <tbody>
-                  <tr v-for="(m, i) in contextModal.sporttery.history.data.matchList.slice(0,20)" :key="i">
+                  <tr v-for="(m, i) in contextModal.sporttery.history.matchList.slice(0,20)" :key="i">
                     <td>{{ m.matchDate || '-' }}</td>
                     <td>{{ m.leagueAbbName || m.leagueName || '-' }}</td>
                     <td>{{ m.homeTeamShortName }}</td>
@@ -282,7 +282,7 @@
           </div>
           <!-- Tab: 积分榜 -->
           <div v-show="contextModal.tab==='tables'">
-            <div v-if="!contextModal.sporttery?.tables?.data" class="muted">暂无积分榜</div>
+            <div v-if="!contextModal.sporttery?.tables" class="muted">暂无积分榜</div>
             <div v-else>
               <div v-for="(side, sideKey) in {homeTables:'主队',awayTables:'客队'}" :key="sideKey">
                 <h4 class="mb-8">{{ side }}</h4>
@@ -291,14 +291,14 @@
                   <tbody>
                     <tr v-for="(row, k) in ['total','home','away']" :key="k">
                       <td>{{ {total:'总',home:'主',away:'客'}[k] }}</td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.totalLegCnt || '-' }}</td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.winGoalMatchCnt }}/{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.drawMatchCnt }}/{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.lossGoalMatchCnt }}</td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.winProbability || '-' }}</td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.goalCnt || '-' }}</td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.lossGoalCnt || '-' }}</td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.netGoal || '-' }}</td>
-                      <td><b>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.points || '-' }}</b></td>
-                      <td>{{ contextModal.sporttery.tables.data[sideKey]?.[row]?.ranking || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.totalLegCnt || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.winGoalMatchCnt }}/{{ contextModal.sporttery.tables[sideKey]?.[row]?.drawMatchCnt }}/{{ contextModal.sporttery.tables[sideKey]?.[row]?.lossGoalMatchCnt }}</td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.winProbability || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.goalCnt || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.lossGoalCnt || '-' }}</td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.netGoal || '-' }}</td>
+                      <td><b>{{ contextModal.sporttery.tables[sideKey]?.[row]?.points || '-' }}</b></td>
+                      <td>{{ contextModal.sporttery.tables[sideKey]?.[row]?.ranking || '-' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -307,14 +307,14 @@
           </div>
           <!-- Tab: 未来赛事 -->
           <div v-show="contextModal.tab==='future'">
-            <div v-if="!contextModal.sporttery?.future?.data" class="muted">暂无未来赛事</div>
+            <div v-if="!contextModal.sporttery?.future" class="muted">暂无未来赛事</div>
             <div v-else>
               <div v-for="(side, sideKey) in {home:'主队未来',away:'客队未来'}" :key="sideKey">
                 <h4 class="mb-8">{{ side }}</h4>
-                <table class="h2h-table" v-if="contextModal.sporttery.future.data[sideKey]?.matchList?.length">
+                <table class="h2h-table" v-if="contextModal.sporttery.future[sideKey]?.matchList?.length">
                   <thead><tr><th>日期</th><th>赛事</th><th>主队</th><th>客队</th></tr></thead>
                   <tbody>
-                    <tr v-for="(m, i) in contextModal.sporttery.future.data[sideKey].matchList.slice(0,10)" :key="i">
+                    <tr v-for="(m, i) in contextModal.sporttery.future[sideKey].matchList.slice(0,10)" :key="i">
                       <td>{{ (m.matchDateTime || '').slice(0,10) }}</td>
                       <td>{{ m.leagueAbbName || '-' }}</td>
                       <td>{{ m.homeTeamShortName }}</td>
