@@ -12,9 +12,18 @@ const http = require('http');
 const BASE = 'https://webapi.sporttery.cn/gateway/uniform/football/';
 const REFERER = 'https://www.sporttery.cn/';
 
+// 中继支持：RESULT_PROXY_URL 不为空时，把目标 URL 作为 ?url= 参数转发
+// （Render 新加坡节点被竞彩官网 geo-block，需经国内中继转发）
+function resolveUrl(base) {
+  const proxy = process.env.RESULT_PROXY_URL;
+  if (!proxy) return base;
+  return proxy + (proxy.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(base);
+}
+
 function getJson(url, timeoutMs = 12000) {
+  const target = resolveUrl(url);
   return new Promise((resolve, reject) => {
-    const u = new URL(url);
+    const u = new URL(target);
     const lib = u.protocol === 'http:' ? http : https;
     const req = lib.request({
       hostname: u.hostname,

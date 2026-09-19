@@ -340,15 +340,40 @@ router.get('/sweep/:id/sporttery-context', adminAuth, async (req, res) => {
     }
 
     const type = req.query.type || 'all';
+    // 优先读 DB 缓存（1 小时内有效；生产节点被 geo-block 时仍可命中缓存）
+    const cached = await queryOne(`SELECT * FROM sporttery_detail_cache WHERE sweep_id = ?`, [req.params.id]);
+    const fresh = cached && cached.fetched_at && (Date.now() - new Date(cached.fetched_at).getTime() < 3600 * 1000);
     let result = {};
-    if (type === 'feature' || type === 'all') result.feature = await sporttery.getMatchFeature(ids, 10);
-    if (type === 'h2h' || type === 'all') result.history = await sporttery.getResultHistory(ids, 10);
-    if (type === 'tables' || type === 'all') result.tables = await sporttery.getMatchTables(ids);
-    if (type === 'future' || type === 'all') result.future = await sporttery.getFutureMatches(ids, 4);
-    if (type === 'injury' || type === 'all') result.injury = await sporttery.getInjurySuspension(ids);
+    let fromCache = false;
+    if (fresh) {
+      fromCache = true;
+      result = {
+        feature: cached.feature ? JSON.parse(cached.feature) : null,
+        history: cached.history ? JSON.parse(cached.history) : null,
+        tables: cached.tables ? JSON.parse(cached.tables) : null,
+        future: cached.future ? JSON.parse(cached.future) : null,
+        injury: cached.injury ? JSON.parse(cached.injury) : null,
+      };
+    } else {
+      if (type === 'feature' || type === 'all') result.feature = await sporttery.getMatchFeature(ids, 10);
+      if (type === 'h2h' || type === 'all') result.history = await sporttery.getResultHistory(ids, 10);
+      if (type === 'tables' || type === 'all') result.tables = await sporttery.getMatchTables(ids);
+      if (type === 'future' || type === 'all') result.future = await sporttery.getFutureMatches(ids, 4);
+      if (type === 'injury' || type === 'all') result.injury = await sporttery.getInjurySuspension(ids);
+      // 写缓存（仅当至少有一个端点成功）
+      const anyOk = Object.values(result).some(r => r && r.ok);
+      if (anyOk) {
+        const j = k => (result[k] && result[k].ok && result[k].data) ? JSON.stringify(result[k].data) : null;
+        try {
+          await run(`INSERT OR REPLACE INTO sporttery_detail_cache (sweep_id, sporttery_match_id, wbsj_match_id, feature, history, tables, future, injury, fetched_at, updated_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`,
+            [req.params.id, row.sporttery_match_id, row.wbsj_match_id, j('feature'), j('history'), j('tables'), j('future'), j('injury')]);
+        } catch (e) { console.error('cache write err', e.message); }
+      }
+    }
 
     res.json({
       ok: true,
+      fromCache,
       record: { home_team: row.home_team, away_team: row.away_team, league: row.league, match_time: row.match_time },
       sportteryMatchId: row.sporttery_match_id,
       wbsjMatchId: row.wbsj_match_id,
