@@ -40,8 +40,8 @@
 
     <!-- 手动补充信息 -->
     <div class="section-card" v-if="selectedRecord">
-      <h2 class="section-title">✏️ 补充基本面数据（联网自动获取，未获取请手动填写）</h2>
-      <p class="section-tip">以下字段可联网获取，若系统未能获取请手动补充。留空则不填入分析提示词。</p>
+      <h2 class="section-title">✏️ 补充基本面数据 <span v-if="fetchingStats" class="loading-tag">⏳ 联网获取中...</span><span v-else-if="statsLoaded" class="loading-tag ok">✅ 数据已获取</span><span v-else-if="statsError" class="loading-tag warn">{{ statsError }}</span></h2>
+      <p class="section-tip">选择比赛后自动联网获取积分/近况/交锋数据；如未能获取请手动填写。</p>
 
       <div class="form-section">
         <div class="form-row">
@@ -170,6 +170,9 @@ const loadingRecords = ref(false)
 const records = ref([])
 const selectedRecord = ref(null)
 const copiedText = ref(false)
+const fetchingStats = ref(false)
+const statsError = ref('')
+const statsLoaded = ref(false)
 
 // 补充表单数据
 const form = ref({
@@ -223,11 +226,72 @@ async function loadSweepRecords() {
 function selectRecord(r) {
   if (selectedRecord.value && selectedRecord.value.id === r.id) {
     selectedRecord.value = null
+    statsLoaded.value = false
     return
   }
   selectedRecord.value = r
+  statsLoaded.value = false
+  statsError.value = ''
   // 重置补充表单
   form.value = { home_form: '', away_form: '', home_goals_per_game: '', home_concede_per_game: '', away_goals_per_game: '', away_concede_per_game: '', home_points: '', away_points: '', home_home_record: '', away_away_record: '', home_injuries: '', away_injuries: '', h2h: '', notes: '' }
+  // 联网自动获取基本面
+  fetchMatchStats(r.home_team, r.away_team)
+}
+
+async function fetchMatchStats(home, away) {
+  fetchingStats.value = true
+  statsError.value = ''
+  try {
+    const { data } = await api.get('/football/match-context', { params: { home_team: home, away_team: away } })
+    if (data.success && data.context) {
+      const ctx = data.context
+      // 填充表单
+      if (ctx.home) {
+        const h = ctx.home
+        if (h.form?.length) {
+          const win = h.stats?.wins || 0, draw = h.stats?.draws || 0, loss = h.stats?.losses || 0
+          form.value.home_form = `胜${win} 平${draw} 负${loss}`
+        }
+        if (h.stats) {
+          form.value.home_goals_per_game = h.stats.goalsPerGame !== '?' ? h.stats.goalsPerGame : ''
+          form.value.home_concede_per_game = h.stats.concededPerGame !== '?' ? h.stats.concededPerGame : ''
+        }
+        if (h.standings) {
+          form.value.home_points = h.standings.points || ''
+          form.value.home_home_record = h.stats ? `主场${h.stats.wins}胜${h.stats.draws}平${h.stats.losses}负` : ''
+        }
+      }
+      if (ctx.away) {
+        const a = ctx.away
+        if (a.form?.length) {
+          const win = a.stats?.wins || 0, draw = a.stats?.draws || 0, loss = a.stats?.losses || 0
+          form.value.away_form = `胜${win} 平${draw} 负${loss}`
+        }
+        if (a.stats) {
+          form.value.away_goals_per_game = a.stats.goalsPerGame !== '?' ? a.stats.goalsPerGame : ''
+          form.value.away_concede_per_game = a.stats.concededPerGame !== '?' ? a.stats.concededPerGame : ''
+        }
+        if (a.standings) {
+          form.value.away_points = a.standings.points || ''
+          form.value.away_away_record = a.stats ? `客场${a.stats.wins}胜${a.stats.draws}平${a.stats.losses}负` : ''
+        }
+      }
+      if (ctx.h2h && ctx.h2h.length > 0) {
+        const hw = ctx.h2h.filter(m => m.winner === 'home').length
+        const aw = ctx.h2h.filter(m => m.winner === 'away').length
+        const dr = ctx.h2h.length - hw - aw
+        form.value.h2h = `近${ctx.h2h.length}场：主队${hw}胜 客队${aw}胜 平${dr}`
+      }
+      statsLoaded.value = true
+    }
+  } catch (e) {
+    if (e.response?.data?.error) {
+      statsError.value = '⚠️ ' + e.response.data.error + '（可手动填写下方字段）'
+    } else {
+      statsError.value = '⚠️ 获取数据失败，请手动填写下方字段'
+    }
+  }
+  fetchingStats.value = false
 }
 
 const RESULT_LABELS = { win: '✅ 红', loss: '❌ 黑', push: '🔄 走', pending: '⏳ 待定' }
@@ -249,21 +313,31 @@ const generatedPrompt = computed(() => {
     return `${d.getMonth()+1}月${d.getDate()}日 ${wd} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
   })()
 
-  const homeGoals = f.home_goals_per_game ? `场均进球：${f.home_goals_per_game}` : ''
-  const homeConcede = f.home_concede_per_game ? `场均失球：${f.home_concede_per_game}` : ''
-  const awayGoals = f.away_goals_per_game ? `场均进球：${f.away_goals_per_game}` : ''
-  const awayConcede = f.away_concede_per_game ? `场均失球：${f.away_concede_per_game}` : ''
-  const homePoints = f.home_points ? `积分：${f.home_points}分` : ''
-  const awayPoints = f.away_points ? `积分：${away_points}分` : ''
+  const homeGoals = f.home_goals_per_game ? `场均进球：${f.home_goals_per_game}球` : ''
+  const homeConcede = f.home_concede_per_game ? `场均失球：${f.home_concede_per_game}球` : ''
+  const awayGoals = f.away_goals_per_game ? `场均进球：${f.away_goals_per_game}球` : ''
+  const awayConcede = f.away_concede_per_game ? `场均失球：${f.away_concede_per_game}球` : ''
+  const homePoints = f.home_points ? `第${f.home_points}名` : ''
+  const awayPoints = f.away_points ? `第${f.away_points}名` : ''
+  const homeRec = f.home_home_record || ''
+  const awayRec = f.away_away_record || ''
+
+  const extraInfo = [
+    (homePoints || awayPoints) ? `积分榜：${home} ${homePoints ? '第' + homePoints + '名' : '?'}，${away} ${awayPoints ? '第' + awayPoints + '名' : '?'}` : '',
+    f.home_form ? `${home}近期战绩：${f.home_form}` : '',
+    f.away_form ? `${away}近期战绩：${f.away_form}` : '',
+    (homeGoals || homeConcede) ? `${home}：${[homeGoals, homeConcede].filter(Boolean).join('，')}` : '',
+    (awayGoals || awayConcede) ? `${away}：${[awayGoals, awayConcede].filter(Boolean).join('，')}` : '',
+    homeRec ? `${home}主场：${homeRec}` : '',
+    awayRec ? `${away}客场：${awayRec}` : '',
+    f.h2h ? `历史交锋：${f.h2h}` : '',
+  ].filter(Boolean).join('\n')
 
   return `你现在是一名拥有10年经验的资深足球数据分析师，请根据我提供的基本面数据，对本场比赛进行客观、多维度的专业前瞻分析。
 
 【输入数据】
 赛事：${league}；对阵：${home} (主) VS ${away} (客)
-${f.home_points || f.away_points ? `积分榜排名：主队排第${f.home_points || '?'}，客队排第${f.away_points || '?'}` : ''}
-${f.home_form ? `近6场战绩：主队近6场 ${f.home_form}` : ''}
-${f.away_form ? `客队近6场 ${f.away_form}` : ''}
-${f.h2h ? `历史交锋：${f.h2h}` : ''}
+${extraInfo}
 
 ${f.home_injuries || f.away_injuries ? `【伤停信息】
 主队伤停：${f.home_injuries || '未获取'}
@@ -390,6 +464,19 @@ onMounted(() => {
 .ai-icon { font-size: 28px; }
 .ai-name { font-size: 14px; font-weight: 700; color: #E6EDF3; }
 .ai-desc { font-size: 11px; color: #8B949E; }
+
+.loading-tag { font-size: 12px; margin-left: 8px; font-weight: 400; }
+.loading-tag.ok { color: #3FB950; }
+.loading-tag.warn { color: #D29922; }
+
+.copy-toast { margin-top: 10px; padding: 10px 14px; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); border-radius: 8px; color: #3FB950; font-size: 13px; }
+.preview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.preview-card pre { background: #0D1117; border: 1px solid #21262D; border-radius: 8px; padding: 16px; font-size: 12px; color: #C9D1D9; white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; line-height: 1.6; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid #30363D; background: #21262D; color: #C9D1D9; cursor: pointer; font-size: 13px; font-family: inherit; transition: all 0.15s; }
+.btn:hover { background: #30363D; }
+.btn-ghost { background: transparent; border-color: #30363D; }
+.btn-ghost:hover { background: #21262D; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
 .doubao:hover { border-color: #00C7BE; }
 .qianwen:hover { border-color: #00C7BE; }
 .yuanbao:hover { border-color: #00C7BE; }
