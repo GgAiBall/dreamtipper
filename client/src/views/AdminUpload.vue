@@ -857,7 +857,6 @@ function openSporttery(r) {
 // 特征分析（6 维 bar chart）
 function featureList(d) {
   if (!d) return []
-  // d = { last: {home/away}, sameHomeAway: ..., eachHomeAway: ..., eachSameHomeAway: ..., homeFeature, awayFeature }
   const fmt = (s) => {
     if (!s) return null
     const total = parseInt(s.totalLegCnt || s.totalLeg || 0)
@@ -865,7 +864,9 @@ function featureList(d) {
     const draws = parseInt(s.drawMatchCnt || 0)
     const losses = parseInt(s.lossGoalMatchCnt || 0)
     const pct = (n) => total > 0 ? Math.round(n * 100 / total) : 0
-    return { homeText: `${wins}胜${draws}平${losses}负 (${total}场)`, awayText: `${losses}胜${draws}平${wins}负 (${total}场)`, homePct: pct(wins), awayPct: pct(losses) }
+    const homeText = wins + '胜' + draws + '平' + losses + '负 (' + total + '场)'
+    const awayText = losses + '胜' + draws + '平' + wins + '负 (' + total + '场)'
+    return { homeText, awayText, homePct: pct(wins), awayPct: pct(losses) }
   }
   const items = [
     { key: 'last', title: '近10场战绩' },
@@ -874,28 +875,14 @@ function featureList(d) {
     { key: 'eachSameHomeAway', title: '同主客交锋' }
   ]
   const rows = []
-  for (const it of items) {
-    const f = fmt(d[it.key])
-    if (f) rows.push({ title: it.title, ...f })
-  }
-  // 场均进失球
+  for (const it of items) { const f = fmt(d[it.key]); if (f) rows.push({ title: it.title, ...f }) }
   if (d.homeFeature || d.awayFeature) {
-    const hf = d.homeFeature || {}
-    const af = d.awayFeature || {}
-    rows.push({
-      title: '场均进球',
-      homeText: `${hf.avgGoal || '-'}个`, awayText: `${af.avgGoal || '-'}个`,
-      homePct: parseFloat(hf.avgGoal || 0) * 30, awayPct: parseFloat(af.avgGoal || 0) * 30
-    })
-    rows.push({
-      title: '场均失球',
-      homeText: `${hf.avgLossGoal || '-'}个`, awayText: `${af.avgLossGoal || '-'}个`,
-      homePct: parseFloat(hf.avgLossGoal || 0) * 30, awayPct: parseFloat(af.avgLossGoal || 0) * 30
-    })
+    const hf = d.homeFeature || {}; const af = d.awayFeature || {}
+    rows.push({ title: '场均进球', homeText: (hf.avgGoal || '-') + '个', awayText: (af.avgGoal || '-') + '个', homePct: parseFloat(hf.avgGoal || 0) * 30, awayPct: parseFloat(af.avgGoal || 0) * 30 })
+    rows.push({ title: '场均失球', homeText: (hf.avgLossGoal || '-') + '个', awayText: (af.avgLossGoal || '-') + '个', homePct: parseFloat(hf.avgLossGoal || 0) * 30, awayPct: parseFloat(af.avgLossGoal || 0) * 30 })
   }
   return rows
 }
-
 async function fetchResult(id) {
   fetching.value = true
   try {
