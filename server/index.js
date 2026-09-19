@@ -32,6 +32,35 @@ async function start() {
   app.use('/api/analysis', require('./routes/analysis'));
   app.use('/api/football', require('./routes/football'));
 
+  // 竞彩赛程自动同步接口（手动触发 / 供 cron 调用）
+  const checkSyncAuth = (req) => {
+    const token = req.headers.authorization || '';
+    const syncKey = req.headers['x-sync-key'] || '';
+    return token === `Bearer ${process.env.JWT_SECRET || 'dreamtipper-secret-key-2024'}`
+        || syncKey === (process.env.SYNC_KEY || 'dt-sync-2026');
+  };
+  app.post('/api/sync/sporttery', async (req, res) => {
+    if (!checkSyncAuth(req)) return res.status(401).json({ error: '未授权' });
+    try {
+      const { runSync } = require('./syncScheduler');
+      const result = await runSync({ dryRun: false });
+      res.json(result);
+    } catch(e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/sync/sporttery', async (req, res) => {
+    if (!checkSyncAuth(req)) return res.status(401).json({ error: '未授权' });
+    try {
+      const { runSync } = require('./syncScheduler');
+      const result = await runSync({ dryRun: true });
+      res.json(result);
+    } catch(e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // 托管前端静态文件（client/dist）
   const clientDist = path.resolve(__dirname, '../client/dist');
   if (fs.existsSync(clientDist)) {

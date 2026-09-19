@@ -86,17 +86,70 @@ router.post('/upload/sweep', adminAuth, upload.single('file'), async (req, res) 
   }
 });
 
-// 下载扫盘数据 Excel 模板（自动识别列用）
-router.get('/upload/template', adminAuth, (req, res) => {
+// 将 handicap JSON 字符串解析为各玩法列文本（用 / 隔开）
+function splitHandicapToColumns(handicapJson) {
+  const cols = { wdl: [], hcLine: [], hcResult: [], score: [], goals: [], halfFull: [] };
+  if (!handicapJson) return cols;
+  let arr = [];
+  try { arr = JSON.parse(handicapJson); } catch (e) { return cols; }
+  if (!Array.isArray(arr)) return cols;
+  const SCORE = ['1:0','2:0','2:1','3:0','3:1','3:2','4:0','4:1','4:2','5:0','5:1','5:2','胜其它','0:0','1:1','2:2','3:3','平其它','0:1','0:2','1:2','0:3','1:3','2:3','0:4','1:4','2:4','0:5','1:5','2:5','负其它'];
+  const GOALS = ['0','1','2','3','4','5','6','7+'];
+  const HF = ['胜胜','胜平','胜负','平胜','平平','平负','负胜','负平','负负'];
+  for (const p of arr) {
+    const pick = String(p.pick || '');
+    if (pick === '胜' || pick === '平' || pick === '负') cols.wdl.push(pick);
+    else if (pick.startsWith('让')) { cols.hcResult.push(pick); if (p.handicap != null && p.handicap !== '') cols.hcLine.push(String(p.handicap)); }
+    else if (SCORE.includes(pick)) cols.score.push(pick);
+    else if (GOALS.includes(pick)) cols.goals.push(pick);
+    else if (HF.includes(pick)) cols.halfFull.push(pick);
+  }
+  return cols;
+}
+
+// 下载扫盘数据 Excel 模板（自动识别列用），自动包含当天及未来在售比赛
+router.get('/upload/template', adminAuth, async (req, res) => {
   try {
     const XLSX = require('xlsx');
     const header = ['联赛','主队','客队','比赛日期','开赛时间','周几','场次编号','信心星级','权限','胜平负推荐','让球盘口','让球结果','比分推荐','进球推荐','半全场推荐','结果','分类','详情页链接'];
-    const sample = [
-      ['英超','曼联','利物浦','2026-09-16','19:30','周三','001','4','免费','胜','-0.5','让胜','2:1','2','胜胜',''],
-      ['西甲','皇马','巴萨','2026-09-17','22:00','周四','002','5','月度','平','+1','让平','1:1','3','平平',''],
-      ['','','','','','','','','','','','','','','','','',''],
-      ['','','','','','','','','','','','','','','','（从下一行开始填写你的数据）','',''],
-    ];
+    // 拉取今天 00:00 起的所有比赛（含未来销售窗口）
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const rows = await queryAll(
+      `SELECT * FROM sweep_records WHERE match_time >= ? ORDER BY match_time ASC LIMIT 200`,
+      [todayStart.toISOString().slice(0, 19).replace('T', ' ')]
+    );
+    const sample = [];
+    for (const r of rows) {
+      const mt = new Date(r.match_time);
+      const dateStr = `${mt.getFullYear()}-${String(mt.getMonth()+1).padStart(2,'0')}-${String(mt.getDate()).padStart(2,'0')}`;
+      const timeStr = `${String(mt.getHours()).padStart(2,'0')}:${String(mt.getMinutes()).padStart(2,'0')}`;
+      const hc = splitHandicapToColumns(r.handicap);
+      sample.push([
+        r.league || '',
+        r.home_team || '',
+        r.away_team || '',
+        dateStr,
+        timeStr,
+        r.weekday || '',
+        r.match_no || '',
+        r.confidence_stars || 3,
+        r.tier_required || '免费',
+        hc.wdl.join('/'),
+        [...new Set(hc.hcLine)].join('/'),
+        hc.hcResult.join('/'),
+        hc.score.join('/'),
+        hc.goals.join('/'),
+        hc.halfFull.join('/'),
+        '',
+        r.category || '人工扫盘',
+        r.detail_url || '',
+      ]);
+    }
+    // 若没有比赛数据，给出示例行
+    if (!sample.length) {
+      sample.push(['英超','曼联','利物浦','2026-09-16','19:30','周三','001','4','免费','胜','-0.5','让胜','2:1','2','胜胜','', '人工扫盘', '']);
+      sample.push(['西甲','皇马','巴萨','2026-09-17','22:00','周四','002','5','月度','平','+1','让平','1:1','3','平平','', '人工扫盘', '']);
+    }
     const ws = XLSX.utils.aoa_to_sheet([header, ...sample]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '扫盘数据');

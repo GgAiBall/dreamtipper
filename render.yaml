@@ -37,3 +37,6 @@ services:
       # 例：https://你的中转域名   （部署在能访问 webapi.sporttery.cn 的国内节点）
       - key: RESULT_PROXY_URL
         sync: false
+      # 每日自动同步竞彩赛程的专用密钥（供 cron / 定时任务调用 /api/sync/sporttery）
+      - key: SYNC_KEY
+        value: dt-sync-2026
